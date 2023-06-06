@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.stats as st
-import matplotlib.pyplot as plt
+from multiprocessing import Pool, cpu_count
 
 np.random.seed(0)
 
@@ -27,7 +27,11 @@ def progressbar(it, prefix="", size=60, out=sys.stdout): # Python3.3+
         show(i+1)
     print("\n", flush=True, file=out)
 
-def mc_iteration(nom_coverage):
+def mc_iteration(params):
+    nom_coverage, random_seed = params
+
+    np.random.seed(random_seed)
+
     # Exact confidence interval
     exact_coverage = 0
     universal_coverage = 0
@@ -66,72 +70,68 @@ def mc_iteration(nom_coverage):
     data1_init_train = st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1)[0]
     data1_test = st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1)
 
-    # train_data consists of tuples (theta, label, risk), with "label" being 0 or 1 whether theta came N(mu0, cov) or N(mu1, cov), and "risk" being the number of errors theta makes on the training data. It is sorted in order of ascending theta.
+    # train_data consists of tuples (theta, labe), with "label" being 0 or 1 whether theta came N(mu0, cov) or N(mu1, cov). It is sorted in order of ascending theta.
     # train_data_raw only contains the theta values to speed up some operations
     c_est = data0_init_train
     if data0_init_train < data1_init_train:
-        train_data = np.array([[data0_init_train, 0, 0], [data1_init_train, 1, 1]])
+        train_data = np.array([[data0_init_train, 0], [data1_init_train, 1]])
         train_data_raw = np.array([data0_init_train, data1_init_train])
     else:
-        train_data = np.array([[data1_init_train, 1, 2], [data0_init_train, 0, 1]])
+        train_data = np.array([[data1_init_train, 1], [data0_init_train, 0]])
         train_data_raw = np.array([data1_init_train, data0_init_train])
 
     n0 = 2
     n1 = 2
     while True:
-        if (n0 + n1) % 10000 == 0:
-            universal_sample_size = 10000
-            break
         def emp_risk_test(theta):
-            err_count = np.searchsorted(data1_test, theta, side="right")
-            err_count += len(data0_test) - np.searchsorted(data0_test, theta, side="left")
-            return err_count
-            #return len([x for x in data1_test if x <= theta]) + len([x for x in data0_test if x > theta])
+            return len([x for x in data1_test if x <= theta]) + len([x for x in data0_test if x > theta])
 
         def T(theta, omega):
             return (omega * (emp_risk_test(c_est) - emp_risk_test(theta)))
 
         # Check that confidence set contains zero
         if T(0, omega) >= np.log(1 - nom_coverage):
-            # With 50% probability, generate a new data point for the test set. Each distribution then gets another 50/50 shot.
-            if np.random.rand() < 0.5:
+            # To speed things up, if the sample size is already quite large, add several points each time.
+            num_samples_to_add = (n0+n1)//100 + 1
+            for _ in range(num_samples_to_add):
+                # With 50% probability, generate a new data point for the test set. Each distribution then gets another 50/50 shot.
                 if np.random.rand() < 0.5:
-                    new_point = st.norm.rvs(loc = mu0, scale = cov**0.5, size = 1)[0]
-                    idx = np.searchsorted(data0_test, new_point)
-                    data0_test = np.insert(data0_test, idx, new_point)
-                    n0 += 1
-                else:
-                    new_point = st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1)[0]
-                    idx = np.searchsorted(data1_test, new_point)
-                    data1_test = np.insert(data1_test, idx, new_point)
-                    n1 += 1
-            # With 50% probability we instead generate a new data point for the training set
-            else:
-                if np.random.rand() < 0.5:
-                    new_point = st.norm.rvs(loc = mu0, scale = cov**0.5, size = 1)[0]
-                    idx = np.searchsorted(train_data_raw, new_point)
-                    if idx == len(train_data):
-                        train_data = np.insert(train_data, idx, np.array([new_point, 0, train_data[-1][2]]), axis = 0)
+                    if np.random.rand() < 0.5:
+                        new_point = st.norm.rvs(loc = mu0, scale = cov**0.5, size = 1)[0]
+                        idx = np.searchsorted(data0_test, new_point)
+                        data0_test = np.insert(data0_test, idx, new_point)
+                        n0 += 1
                     else:
-                        error_count = train_data[idx][2] + 1 if train_data[idx][1] == 0 else train_data[idx][2] - 1
-                        train_data = np.insert(train_data, idx, np.array([new_point, 0, error_count]), axis = 0)
-                    for i in range(idx):
-                        train_data[i][2] += 1
-                    train_data_raw = np.insert(train_data_raw, idx, new_point)
-                    n0 += 1
+                        new_point = st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1)[0]
+                        idx = np.searchsorted(data1_test, new_point)
+                        data1_test = np.insert(data1_test, idx, new_point)
+                        n1 += 1
+                # With 50% probability we instead generate a new data point for the training set
                 else:
-                    new_point = st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1)[0]
-                    idx = np.searchsorted(train_data_raw, new_point)
-                    if idx == 0:
-                        error_count = train_data[idx][2] if train_data[idx][1] == 1 else train_data[idx][2] + 2
-                        train_data = np.insert(train_data, idx, np.array([new_point, 1, error_count]), axis = 0)
+                    if np.random.rand() < 0.5:
+                        new_point = st.norm.rvs(loc = mu0, scale = cov**0.5, size = 1)[0]
+                        idx = np.searchsorted(train_data_raw, new_point)
+                        train_data = np.insert(train_data, idx, np.array([new_point, 0]), axis = 0)
+                        n0 += 1
                     else:
-                        train_data = np.insert(train_data, idx, np.array([new_point, 1, train_data[idx-1][2] + 1]), axis = 0)
-                    for i in range(idx + 1, len(train_data)):
-                        train_data[i][2] += 1
+                        new_point = st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1)[0]
+                        idx = np.searchsorted(train_data_raw, new_point)
+                        train_data = np.insert(train_data, idx, np.array([new_point, 1]), axis = 0)
+                        n1 += 1
                     train_data_raw = np.insert(train_data_raw, idx, new_point)
-                    n1 += 1
-            c_est = train_data_raw[np.argmin([x[2] for x in train_data])]
+
+            # ERM computation
+            num_1s = 0
+            c_est = train_data[0][0]
+            for (theta, label) in train_data:
+                if label == 1:
+                    num_1s += 1
+                else:
+                    num_1s -= 1
+                    if num_1s <= 0:
+                        c_est = theta
+                        num_1s = 0
+
             continue
 
         # Check that confidence set contains c
@@ -140,6 +140,7 @@ def mc_iteration(nom_coverage):
         universal_sample_size = n0+n1
         break
 
+    print(exact_coverage, universal_coverage, exact_sample_size, universal_sample_size)
     return (exact_coverage, universal_coverage, exact_sample_size, universal_sample_size)
 
 
@@ -147,10 +148,11 @@ def mc_iteration(nom_coverage):
 nom_coverages = np.linspace(0, 1, num=10)[1:-1]
 exact_coverages = []
 universal_coverages = []
+p = Pool(processes=max(cpu_count(), 8))
 for nom_coverage in nom_coverages:
     print("Nominal coverage:", round(nom_coverage, 2))
     mc_iters = 100
-    output = [mc_iteration(nom_coverage) for _ in range(mc_iters)]
+    output = p.map(mc_iteration, [(nom_coverage, idx) for idx in range(mc_iters)])
 
     exact_coverages.append(np.mean([ec for (ec, uc, ess, uss) in output]))
     universal_coverages.append(np.mean([uc for (ec, uc, ess, uss) in output]))
@@ -159,12 +161,3 @@ for nom_coverage in nom_coverages:
     print(exact_coverages)
     print("Universal coverages")
     print(universal_coverages)
-
-plt.title("Normally Distributed Data")
-plt.scatter(nom_coverages, exact_coverages, color="blue", label = "Exact CI")
-plt.scatter(nom_coverages, universal_coverages, color = "red", label = "Universal CI")
-plt.plot(nom_coverages, nom_coverages, color = "black")
-plt.xlabel("Nominal Coverage")
-plt.ylabel("Observed Coverage")
-plt.legend()
-plt.show()
