@@ -11,7 +11,7 @@ cov = 10000
 c = (mu0 + mu1)/2
 
 
-omega = 0.05
+omega = 0.025
 
 
 import sys
@@ -145,7 +145,7 @@ def mc_iteration(params):
 
 
 
-nom_coverages = np.linspace(0, 1, num=10)[1:-1]
+nom_coverages = np.linspace(0, 1, num=100)[1:-1]
 exact_coverages = []
 universal_coverages = []
 p = Pool(processes=max(cpu_count(), 8))
