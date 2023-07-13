@@ -1,41 +1,14 @@
 from sklearn.cluster import KMeans
 import scipy.stats as st
 import numpy as np
+from scipy.linalg import sqrtm
+from numpy.linalg import inv
+import multiprocessing as mp
 import matplotlib.pyplot as plt
 
 np.random.seed(0)
 
-mu1s = []
-mu2s = []
-mu3s = []
-for mc_iter in range(100):
-    sample_size = 100
-    cov = 0.01
-    """
-    x1 = st.multivariate_normal.rvs(mean = [1, 0], cov = cov, size = sample_size*96//100)
-    x2 = st.multivariate_normal.rvs(mean = [np.cos(2*np.pi/3), np.sin(2*np.pi/3)], cov = cov, size = sample_size*3//100)
-    x3 = st.multivariate_normal.rvs(mean = [np.cos(4*np.pi/3), np.sin(4*np.pi/3)], cov = cov, size = sample_size*1//100)
-    x = np.vstack([x1, x2, x3])
-    mu = KMeans(n_clusters = 3, random_state = 0).fit(x).cluster_centers_
-    print(mu)
-    plt.scatter(x1[:,0], x1[:,1], color = "red")
-    plt.scatter(x2[:,0], x2[:,1], color = "blue")
-    plt.scatter(x3[:,0], x3[:,1], color = "green")
-    plt.show()
-    exit()
-    """
-
-    x = []
-    for _ in range(sample_size):
-        if np.random.rand() < .96:
-            mu = [1, 0]
-        elif np.random.rand() < .75:
-            mu = [np.cos(2*np.pi/3), np.sin(2*np.pi/3)]
-        else:
-            mu = [np.cos(4*np.pi/3), np.sin(4*np.pi/3)]
-        x.append(st.multivariate_normal.rvs(mean = mu, cov = cov))
-
-
+def kmeans(x):
     mu = KMeans(n_clusters = 3, random_state = 0).fit(x).cluster_centers_
 
     mu1 = mu[np.argmax(mu, axis = 0)[0]]
@@ -43,19 +16,118 @@ for mc_iter in range(100):
     mu2 = mu[np.argmax(mu, axis = 0)[1]]
     mu3 = mu[np.argmin(mu, axis = 0)[1]]
 
+    return mu1, mu2, mu3
 
-    mu1s.append(mu1)
-    mu2s.append(mu2)
-    mu3s.append(mu3)
+def _gibbs(x, true_mu1, true_mu2, true_mu3, nom_coverage, omega):
+    (train, test) = np.vsplit(x, 2)
 
-mu1s = np.array(mu1s)
-mu2s = np.array(mu2s)
-mu3s = np.array(mu3s)
-print(np.mean(mu1s, axis = 0), np.cov(mu1s, rowvar = False))
-print(np.mean(mu2s, axis = 0), np.cov(mu2s, rowvar = False))
-print(np.mean(mu3s, axis = 0), np.cov(mu3s, rowvar = False))
-plt.scatter(mu3s[:,0], mu3s[:,1], color = "cyan")
-plt.scatter(mu2s[:,0], mu2s[:,1], color = "green")
-plt.scatter(mu1s[:,0], mu1s[:,1], color = "red")
-plt.scatter([1, -0.5, -0.5], [0, 3**0.5/2, -3**0.5/2], color = "black")
+    # KMeans doesn't like duplicate data points; add a tiny amount of noise to training data to rectify this
+    for pt in train:
+        pt += (np.random.rand(2,) - 0.5)/1000
+
+    def emp_risk_test(mu, data):
+        return sum([np.linalg.norm(xi - mu[np.argmin([np.linalg.norm(xi - mui)**2 for mui in mu])])**2 for xi in data])
+    mu1, mu2, mu3 = kmeans(train)
+    T = omega * (emp_risk_test([mu1, mu2, mu3], test) - emp_risk_test([true_mu1, true_mu2, true_mu3], test))
+    return T >= np.log(1 - nom_coverage)
+
+def gibbs(x, nom_coverage):
+    mu1, mu2, mu3 = kmeans(x)
+
+    x = np.array(x)
+
+    boot_iters = 100
+    coverages = []
+    omegas = np.linspace(0, 100, num = 20)[1:]
+    for omega in omegas:
+        boot_coverages = [_gibbs(np.random.default_rng().choice(x, size = len(x), shuffle = False), mu1, mu2, mu3, nom_coverage, omega) for _ in range(boot_iters)]
+        coverage = np.mean(boot_coverages)
+        coverages.append(coverage)
+
+    omega = omegas[np.argmin([abs(nom_coverage - coverage) for coverage in coverages])]
+    print("    ", omega, coverages[np.argmin([abs(nom_coverage - coverage) for coverage in coverages])])
+
+    true_mu1 = [1, 0]
+    true_mu2 = [np.cos(2*np.pi/3), np.sin(2*np.pi/3)]
+    true_mu3 = [np.cos(4*np.pi/3), np.sin(4*np.pi/3)]
+    return _gibbs(x, true_mu1, true_mu2, true_mu3, nom_coverage, omega)
+
+
+
+
+def mc_iteration(nom_coverage):
+    exact_coverage = 0
+    universal_coverage = 0
+
+    # Generate cluster data
+    x = []
+    sample_size = 10
+    cov = 0.01
+    #probs = [1/3, 1/2]
+    probs = [0.96, 0.75]
+    for _ in range(sample_size):
+        if np.random.rand() < probs[0]:
+            mu = [1, 0]
+        elif np.random.rand() < probs[1]:
+            mu = [np.cos(2*np.pi/3), np.sin(2*np.pi/3)]
+        else:
+            mu = [np.cos(4*np.pi/3), np.sin(4*np.pi/3)]
+        x.append(st.multivariate_normal.rvs(mean = mu, cov = cov))
+
+    # Bootstrapped CS
+    """
+    bootstrap_iters = 100
+    boot_mu1s = []
+    boot_mu2s = []
+    boot_mu3s = []
+    for boot_iter in range(bootstrap_iters):
+        boot_x = np.random.default_rng().choice(x, size = len(x), shuffle = False)
+        mu1, mu2, mu3 = kmeans(boot_x)
+        boot_mu1s.append(mu1)
+        boot_mu2s.append(mu2)
+        boot_mu3s.append(mu3)
+    mu1_cov_boot = np.cov(boot_mu1s, rowvar = False)
+    mu2_cov_boot = np.cov(boot_mu2s, rowvar = False)
+    mu3_cov_boot = np.cov(boot_mu3s, rowvar = False)
+
+
+    mu1, mu2, mu3 = kmeans(x)
+
+    # Transform
+    true_mu3 = [np.cos(4*np.pi/3), np.sin(4*np.pi/3)]
+    transformed_true_mu3 = inv(sqrtm(mu3_cov_boot)) @ (true_mu3 - mu3)
+    sq_dist_to_origin = np.linalg.norm(transformed_true_mu3)**2
+    pval = 1 - st.chi2.cdf(sq_dist_to_origin, 2)
+    if pval > 1 - nom_coverage:
+        exact_coverage += 1
+    """
+
+    # Gibbs CS
+    true_mu1 = [1, 0]
+    true_mu2 = [np.cos(2*np.pi/3), np.sin(2*np.pi/3)]
+    true_mu3 = [np.cos(4*np.pi/3), np.sin(4*np.pi/3)]
+    universal_coverage += _gibbs(np.array(x), true_mu1, true_mu2, true_mu3, nom_coverage, 16 + 20*(nom_coverage))# gibbs(x, nom_coverage)
+
+    return (exact_coverage, universal_coverage)
+
+
+
+nom_coverages = np.linspace(0.01, 1, num=100)[80:-1]
+exact_coverages = []
+universal_coverages = []
+for nom_coverage in nom_coverages:
+    print("Nominal Coverage:", nom_coverage)
+    mc_iters = 1000
+    output = list(map(mc_iteration, [nom_coverage for _ in range(mc_iters)]))
+
+    exact_coverages.append(np.mean([ec for (ec, uc) in output]))
+    universal_coverages.append(np.mean([uc for (ec, uc) in output]))
+    print(exact_coverages, universal_coverages, flush = True)
+
+#plt.scatter(nom_coverages, exact_coverages, color = "blue", label = "Bootstrapped CS")
+plt.scatter(nom_coverages, universal_coverages, color = "red", label = "Gibbs CS")
+plt.plot(nom_coverages, nom_coverages, color = "black")
+plt.xlabel("Nominal Coverage")
+plt.ylabel("Observed Coverage")
+plt.legend()
 plt.show()

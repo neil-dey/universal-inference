@@ -14,21 +14,26 @@ c = (mu0 + mu1)/2
 omega = 0.01
 
 def _gibbs(mu, data0, data1, nom_coverage, omega):
+    data0_train = data0[:len(data0)//2]
+    data0_test = sorted(data0[len(data0)//2:])
+    data1_train = data1[:len(data1)//2]
+    data1_test = sorted(data1[len(data1)//2:])
+
     raw_data = np.array([])
-    data = np.empty(shape=(0, 2))
-    for theta in data0:
+    train_data = np.empty(shape=(0, 2))
+    for theta in data0_train:
         idx = np.searchsorted(raw_data, theta)
-        data = np.insert(data, idx, [theta, 0], axis = 0)
+        train_data = np.insert(train_data, idx, [theta, 0], axis = 0)
         raw_data = np.insert(raw_data, idx, theta)
 
-    for theta in data1:
+    for theta in data1_train:
         idx = np.searchsorted(raw_data, theta)
-        data = np.insert(data, idx, [theta, 1], axis = 0)
+        train_data = np.insert(train_data, idx, [theta, 1], axis = 0)
         raw_data = np.insert(raw_data, idx, theta)
 
     num_1s = 0
-    c_est = data[0][0]
-    for (theta, label) in data:
+    c_est = train_data[0][0]
+    for (theta, label) in train_data:
         if label == 1:
             num_1s += 1
         else:
@@ -38,29 +43,31 @@ def _gibbs(mu, data0, data1, nom_coverage, omega):
                 num_1s = 0
 
     def emp_risk_test(theta):
-        err_count = np.searchsorted(data1, theta, side="right")
-        err_count += len(data0) - np.searchsorted(data0, theta, side="left")
+        err_count = np.searchsorted(data1_test, theta, side="right")
+        err_count += len(data0_test) - np.searchsorted(data0_test, theta, side="left")
         return err_count
         #return len([x for x in data1_test if x <= theta]) + len([x for x in data0_test if x > theta])
 
     def T(theta, omega):
         return (omega * (emp_risk_test(c_est) - emp_risk_test(theta)))
 
-    # Check that confidence set contains c
-    return T(c, omega) >= np.log(1 - nom_coverage)
+    # Check that confidence set contains mu
+    return T(mu, omega) >= np.log(1 - nom_coverage)
 
 def gibbs(mu, data0, data1, nom_coverage):
     boot_iters = 100
     coverages = []
-    omegas = np.linspace(0, .1, num = 10)[1:]
-    omegas = np.append(omegas, np.linspace(.1, 1, num = 10))
-    #omegas = np.append(omegas, np.linspace(1, 100, num = 100))
+    omegas = np.linspace(0, 1, num = 20)[1:]
+    omegas = np.append(omegas, np.linspace(1, 10, num = 20))
     #omegas = np.append(omegas, np.linspace(100, 1000, num = 100))
     #omegas = np.append(omegas, np.linspace(1000, 10000000, num = 100))
     for omega in omegas:
         coverage = 0
         for _ in range(boot_iters):
-            coverage += _gibbs(mu, np.random.choice(data0, size = len(data0), replace = True), np.random.choice(data1, size = len(data1), replace = True), nom_coverage, omega)
+            boot_data0 = np.random.choice(data0, size = len(data0), replace = True)
+            boot_data1 = np.random.choice(data1, size = len(data1), replace = True)
+            boot_c = (np.mean(data0) + np.mean(data1))/2
+            coverage += _gibbs(boot_c, boot_data0, boot_data1, nom_coverage, omega)
         coverage /= boot_iters
         coverages.append(coverage)
 
@@ -103,50 +110,11 @@ def mc_iteration(nom_coverage):
     universal_coverage = gibbs(c, data0, data1, nom_coverage)
     return (exact_coverage, universal_coverage)
 
-    # ERM computation
-    raw_data = np.array([])
-    data = np.empty(shape=(0, 2))
-    for theta in data0:
-        idx = np.searchsorted(raw_data, theta)
-        data = np.insert(data, idx, [theta, 0], axis = 0)
-        raw_data = np.insert(raw_data, idx, theta)
 
-    for theta in data1:
-        idx = np.searchsorted(raw_data, theta)
-        data = np.insert(data, idx, [theta, 1], axis = 0)
-        raw_data = np.insert(raw_data, idx, theta)
-
-    num_1s = 0
-    c_est = data[0][0]
-    for (theta, label) in data:
-        if label == 1:
-            num_1s += 1
-        else:
-            num_1s -= 1
-            if num_1s <= 0:
-                c_est = theta
-                num_1s = 0
-
-    def emp_risk_test(theta):
-        err_count = np.searchsorted(data1, theta, side="right")
-        err_count += len(data0) - np.searchsorted(data0, theta, side="left")
-        return err_count
-        #return len([x for x in data1_test if x <= theta]) + len([x for x in data0_test if x > theta])
-
-    def T(theta, omega):
-        return (omega * (emp_risk_test(c_est) - emp_risk_test(theta)))
-
-    # Check that confidence set contains c
-    if T(c, omega) >= np.log(1 - nom_coverage):
-        universal_coverage += 1
-
-    return (exact_coverage, universal_coverage)
-
-
-
-nom_coverages = np.linspace(0, 1, num=100)[90:-1]
+nom_coverages = np.linspace(0, 1, num=100)[80:-1]
 exact_coverages = []
 universal_coverages = []
+"""
 for nom_coverage in nom_coverages:
     print("Nominal coverage:", round(nom_coverage, 2))
     mc_iters = 100
@@ -155,12 +123,16 @@ for nom_coverage in nom_coverages:
     exact_coverages.append(np.mean([ec for (ec, uc) in output]))
     universal_coverages.append(np.mean([uc for (ec, uc) in output]))
     print(exact_coverages, universal_coverages)
+"""
+exact_coverages = [0.6066666666666667, 0.56, 0.5566666666666666, 0.6433333333333333, 0.64, 0.6233333333333333, 0.64, 0.6733333333333333, 0.7166666666666667, 0.75, 0.7433333333333333, 0.78, 0.8133333333333334, 0.8166666666666667, 0.8733333333333333, 0.8733333333333333, 0.8966666666666666, 0.9466666666666667, 1.0]
+universal_coverages = [0.89, 0.9, 0.9166666666666666, 0.91, 0.8933333333333333, 0.91, 0.9266666666666666, 0.9366666666666666, 0.9433333333333334, 0.9533333333333334, 0.94, 0.9733333333333334, 0.9733333333333334, 0.98, 0.9833333333333333, 0.9833333333333333, 0.9933333333333333, 0.99, 1.0]
 
-plt.title("Normally Distributed Data")
+plt.rcParams['text.usetex'] = True
+plt.title(r"Stopping Rule: 0 $\not\in\bar{X} \pm z_\alpha \sqrt{s^2/n}$")
 plt.scatter(nom_coverages, exact_coverages, color="blue", label = "Exact CI")
 plt.scatter(nom_coverages, universal_coverages, color = "red", label = "Universal CI")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")
 plt.legend()
-plt.show()
+plt.savefig("exact_cropped.png")

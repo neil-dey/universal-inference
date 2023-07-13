@@ -18,6 +18,14 @@ def ramdas(mu, data, alpha, c = 1/2):
 
     return center - width <= mu and mu <= center+width
 
+
+def u(z, omega, alpha, sigma):
+    return np.log(1/alpha)/(2*omega*sigma**2 * z) + z/2
+
+def lr(omega, alpha, sigma = 1):
+    return 1/(2*np.pi) * dblquad(lambda z1, z2: np.exp(-(z1**2 + z2**2)/2), 0, np.inf, lambda z: u(z, omega, alpha, sigma), np.inf)[0] +  1/(2*np.pi) * dblquad(lambda z1, z2: np.exp(-(z1**2 + z2**2)/2), -np.inf, 0, -np.inf, lambda z: u(z, omega, alpha, sigma))[0]
+
+
 def _gibbs(mu, data, alpha, omega):
     data_train = data[:len(data)//2]
     data_test = data[len(data)//2:]
@@ -28,6 +36,7 @@ def _gibbs(mu, data, alpha, omega):
     return ratio < np.log(1/alpha)
 
 def gibbs(mu, data, alpha):
+    """
     boot_iters = 100
     coverages = []
     num_omegas = 100
@@ -43,7 +52,10 @@ def gibbs(mu, data, alpha):
         coverages.append(coverage)
 
     omega = omegas[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])]
+    """
+    sigma = np.var(data, ddof = 1)**0.5
     #print(omega, coverages[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])])
+    omega = fsolve(lambda omega, alpha, sigma: lr(omega, alpha, sigma) - alpha, 1, args = (alpha, sigma))
     return _gibbs(mu, data, alpha, omega)
 
 
@@ -53,33 +65,29 @@ mu = P.stats()[0]
 
 ramdas_coverages = []
 gibbs_coverages = []
-nom_coverages = np.linspace(0, 1, num = 100)[1:-1]
-"""
+nom_coverages = np.linspace(0, 1, num = 100)[80:-1]
 for nom_coverage in nom_coverages:
     print(nom_coverage)
     ramdas_coverage = 0
     gibbs_coverage = 0
-    mc_iters = 100
+    mc_iters = 1000
     for it in range(mc_iters):
         data = P.rvs(size = 10)
         ramdas_coverage += ramdas(mu, data, 1 - nom_coverage)
-        gibbs_coverage += gibbs(mu, data, 1 - nom_coverage)
-        print("    ", gibbs_coverage/(it + 1))
+        gibbs_coverage += _gibbs(mu, data, 1 - nom_coverage, 410-360*nom_coverage)
+        #print("    ", gibbs_coverage/(it + 1))
     ramdas_coverage /= mc_iters
     gibbs_coverage /= mc_iters
     ramdas_coverages.append(ramdas_coverage)
     gibbs_coverages.append(gibbs_coverage)
     print(ramdas_coverages)
     print(gibbs_coverages)
-"""
-
-ramdas_coverages = [0.99, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.99, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-gibbs_coverages = [0.58, 0.66, 0.68, 0.65, 0.64, 0.61, 0.7, 0.76, 0.64, 0.64, 0.71, 0.62, 0.66, 0.66, 0.63, 0.56, 0.57, 0.64, 0.69, 0.63, 0.75, 0.58, 0.72, 0.7, 0.69, 0.63, 0.65, 0.71, 0.66, 0.66, 0.63, 0.7, 0.7, 0.68, 0.63, 0.73, 0.66, 0.74, 0.69, 0.64, 0.61, 0.7, 0.77, 0.59, 0.61, 0.65, 0.67, 0.66, 0.65, 0.69, 0.65, 0.7, 0.66, 0.69, 0.7, 0.74, 0.83, 0.79, 0.77, 0.77, 0.78, 0.81, 0.81, 0.88, 0.91, 0.94, 0.92, 0.94, 0.92, 0.98, 0.98, 0.97, 0.98, 0.99, 0.97, 1.0, 0.99, 0.99, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
 plt.scatter(nom_coverages, ramdas_coverages, color = "blue", label = "PrPl-EB")
 plt.scatter(nom_coverages, gibbs_coverages, color = "red", label = "Gibbs")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")
+plt.title("Coverage of i.i.d. Beta(5, 2) Sample")
 plt.legend()
 plt.show()
