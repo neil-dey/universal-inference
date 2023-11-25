@@ -106,6 +106,7 @@ def mc_iteration(nom_coverage):
 nom_coverages = np.linspace(0, 1, num=100)[80:-1]
 exact_coverages = []
 universal_coverages = []
+"""
 for nom_coverage in nom_coverages:
     print("Nominal coverage:", round(nom_coverage, 2))
     mc_iters = 100
@@ -117,12 +118,16 @@ for nom_coverage in nom_coverages:
     print("    Coverages:", exact_coverages[-1], universal_coverages[-1])
     print(exact_coverages)
     print(universal_coverages)
+"""
+exact_coverages = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25]
+universal_coverages =[0.94, 0.94, 0.94, 0.99, 0.93, 0.98, 0.91, 0.98, 0.97, 0.98, 0.99, 0.97, 1.0, 0.99, 0.98, 1.0, 1.0, 1.0, 1.0]
 
 plt.title("Stopping Rule: X̅< -10")
 plt.scatter(nom_coverages, exact_coverages, color="blue", label = "Exact CI")
-plt.scatter(nom_coverages, universal_coverages, color = "red", label = "Gibbs CS")
+plt.scatter(nom_coverages, universal_coverages, color = "red", marker = "^", label = "GUI CS")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")
 plt.legend()
-plt.show()
+#plt.show()
+plt.savefig("reroll.png")

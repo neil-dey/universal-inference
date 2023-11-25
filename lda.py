@@ -130,7 +130,7 @@ universal_coverages = [0.89, 0.9, 0.9166666666666666, 0.91, 0.8933333333333333, 
 plt.rcParams['text.usetex'] = True
 plt.title(r"Stopping Rule: 0 $\not\in\bar{X} \pm z_\alpha \sqrt{s^2/n}$")
 plt.scatter(nom_coverages, exact_coverages, color="blue", label = "Exact CI")
-plt.scatter(nom_coverages, universal_coverages, color = "red", label = "Universal CI")
+plt.scatter(nom_coverages, universal_coverages, color = "red", marker = "^", label = "GUI CS")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")
