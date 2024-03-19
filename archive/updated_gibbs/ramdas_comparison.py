@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 np.random.seed(0)
 
 modes = ["online", "offline"]
-mode = modes[0]
+mode = modes[1]
 
 omega_modes = ["parambootstrap_normal", "parambootstrap_beta"]
 omega_mode = omega_modes[0]
@@ -58,7 +58,6 @@ def gibbs(mu, data, alpha):
         coverages.append(coverage)
 
     omega = omegas[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])]
-    #print(omega)
 
     return _gibbs(mu, data, alpha, omega)
 
@@ -71,16 +70,14 @@ ramdas_coverages = []
 gibbs_coverages = []
 nom_coverages = np.linspace(0, 1, num = 100)[80:-1]
 for nom_coverage in nom_coverages:
-    break
     print(nom_coverage)
     ramdas_coverage = 0
     gibbs_coverage = 0
     mc_iters = 100
     for it in range(mc_iters):
         data = P.rvs(size = 10)
-        #ramdas_coverage += ramdas(mu, data, 1 - nom_coverage)
+        ramdas_coverage += ramdas(mu, data, 1 - nom_coverage)
         gibbs_coverage += gibbs(mu, data, 1-nom_coverage)
-        #print("    ", gibbs_coverage/(it + 1))
     ramdas_coverage /= mc_iters
     gibbs_coverage /= mc_iters
     ramdas_coverages.append(ramdas_coverage)
@@ -88,6 +85,9 @@ for nom_coverage in nom_coverages:
     print(ramdas_coverages)
     print(gibbs_coverages)
 
+
+# Final results
+"""
 ramdas_coverages = [0.998, 0.996, 1.0, 0.995, 0.998, 0.999, 0.996, 0.998, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0][-19:]
 beta_coverages = [0.79, 0.82, 0.83, 0.83, 0.84, 0.85, 0.85, 0.85, 0.87, 0.89, 0.92, 0.91, 0.91, 0.95, 0.95, 0.95, 0.97, 0.99, 1.0]
 normal_coverages = [0.8, 0.8, 0.81, 0.83, 0.84, 0.83, 0.87, 0.87, 0.87, 0.89, 0.89, 0.9, 0.93, 0.92, 0.91, 0.93, 0.96, 0.98, 0.99]
@@ -102,3 +102,4 @@ plt.title("Comparison of PrPl-EB and Online Gue")
 plt.legend()
 #plt.show()
 plt.savefig("online_ramdas.png")
+"""

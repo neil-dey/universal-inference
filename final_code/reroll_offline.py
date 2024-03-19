@@ -11,8 +11,6 @@ cov = 10000
 c = (mu0 + mu1)/2
 
 
-omega = 0.01
-
 def _gibbs(mu, data0, data1, nom_coverage, omega):
     data0_train = data0[:len(data0)//2]
     data0_test = sorted(data0[len(data0)//2:])
@@ -57,10 +55,7 @@ def _gibbs(mu, data0, data1, nom_coverage, omega):
 def gibbs(mu, data0, data1, nom_coverage):
     boot_iters = 100
     coverages = []
-    omegas = np.linspace(0, 1, num = 20)[1:]
-    omegas = np.append(omegas, np.linspace(1, 10, num = 20))
-    #omegas = np.append(omegas, np.linspace(100, 1000, num = 100))
-    #omegas = np.append(omegas, np.linspace(1000, 10000000, num = 100))
+    omegas = np.linspace(0.05, 1, num = 20)
     for omega in omegas:
         coverage = 0
         for _ in range(boot_iters):
@@ -79,28 +74,23 @@ def mc_iteration(nom_coverage):
     # Exact confidence interval
     exact_coverage = 0
     universal_coverage = 0
-    data0 = st.norm.rvs(loc = mu0, scale = cov**0.5, size = 2)
-    data1 = st.norm.rvs(loc = mu1, scale = cov**0.5, size = 2)
-    n0 = 2
-    n1 = 2
+    num_tries = 0
     while True:
+        data0 = st.norm.rvs(loc = mu0, scale = cov**0.5, size = 100)
+        data1 = st.norm.rvs(loc = mu1, scale = cov**0.5, size = 100)
+        n0 = 100
+        n1 = 100
         # Point estimate for (mu0 + mu1)/2
         c_est = (np.mean(data0) + np.mean(data1))/2
+
+        # If the estimator is large, try again
+        if  c_est > -10:
+            num_tries += 1
+            continue
 
         # (1-\alpha)100% confidence interval for (mu0 + mu1)/2
         z_alpha = st.norm.interval(nom_coverage)[1]
         CI = [c_est - z_alpha* ((n0 + n1)/(4*n0*n1) * cov)**0.5, c_est + z_alpha * ((n0 + n1)/(4*n0*n1) * cov)**0.5]
-
-        # If the confidence interval still includes the origin, collect more data and try again
-        if CI[0] <= 0 and 0 <= CI[1]:
-            if np.random.rand() < 0.5:
-                data0 = np.append(data0, st.norm.rvs(loc = mu0, scale = cov**0.5, size = 1))
-                n0 += 1
-            else:
-                data1 = np.append(data1, st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1))
-                n1 += 1
-            continue
-
         # Otherwise, we stop collecting data and check if the confidence interval contains the true (mu0+mu1)/2
         if CI[0] <= c and c <= CI[1]:
             exact_coverage += 1
@@ -108,31 +98,38 @@ def mc_iteration(nom_coverage):
 
     # Universal interval
     universal_coverage = gibbs(c, data0, data1, nom_coverage)
-    return (exact_coverage, universal_coverage)
+
+    return (exact_coverage, universal_coverage, num_tries)
+
 
 
 nom_coverages = np.linspace(0, 1, num=100)[80:-1]
 exact_coverages = []
 universal_coverages = []
-"""
 for nom_coverage in nom_coverages:
     print("Nominal coverage:", round(nom_coverage, 2))
     mc_iters = 100
     output = [mc_iteration(nom_coverage) for _ in range(mc_iters)]
 
-    exact_coverages.append(np.mean([ec for (ec, uc) in output]))
-    universal_coverages.append(np.mean([uc for (ec, uc) in output]))
-    print(exact_coverages, universal_coverages)
-"""
-exact_coverages = [0.6066666666666667, 0.56, 0.5566666666666666, 0.6433333333333333, 0.64, 0.6233333333333333, 0.64, 0.6733333333333333, 0.7166666666666667, 0.75, 0.7433333333333333, 0.78, 0.8133333333333334, 0.8166666666666667, 0.8733333333333333, 0.8733333333333333, 0.8966666666666666, 0.9466666666666667, 1.0]
-universal_coverages = [0.89, 0.9, 0.9166666666666666, 0.91, 0.8933333333333333, 0.91, 0.9266666666666666, 0.9366666666666666, 0.9433333333333334, 0.9533333333333334, 0.94, 0.9733333333333334, 0.9733333333333334, 0.98, 0.9833333333333333, 0.9833333333333333, 0.9933333333333333, 0.99, 1.0]
+    exact_coverages.append(np.mean([ec for (ec, uc, nt) in output]))
+    universal_coverages.append(np.mean([uc for (ec, uc, nt) in output]))
+    print("    Avg. tries:", np.mean([nt for (ec, uc, nt) in output]))
+    print("    Coverages:", exact_coverages[-1], universal_coverages[-1])
+    print(exact_coverages)
+    print(universal_coverages)
 
-plt.rcParams['text.usetex'] = True
-plt.title(r"Stopping Rule: 0 $\not\in\bar{X} \pm z_\alpha \sqrt{s^2/n}$")
+# Final results
+"""
+exact_coverages = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25]
+universal_coverages =[0.94, 0.94, 0.94, 0.99, 0.93, 0.98, 0.91, 0.98, 0.97, 0.98, 0.99, 0.97, 1.0, 0.99, 0.98, 1.0, 1.0, 1.0, 1.0]
+
+plt.title("Stopping Rule: X̅< -10")
 plt.scatter(nom_coverages, exact_coverages, color="blue", label = "Exact CI")
 plt.scatter(nom_coverages, universal_coverages, color = "red", marker = "^", label = "GUI CS")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")
 plt.legend()
-plt.savefig("exact_cropped.png")
+#plt.show()
+plt.savefig("reroll.png")
+"""

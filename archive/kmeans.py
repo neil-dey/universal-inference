@@ -75,7 +75,6 @@ def mc_iteration(nom_coverage):
         x.append(st.multivariate_normal.rvs(mean = mu, cov = cov))
 
     # Bootstrapped CS
-    """
     bootstrap_iters = 100
     boot_mu1s = []
     boot_mu2s = []
@@ -100,13 +99,12 @@ def mc_iteration(nom_coverage):
     pval = 1 - st.chi2.cdf(sq_dist_to_origin, 2)
     if pval > 1 - nom_coverage:
         exact_coverage += 1
-    """
 
     # Gibbs CS
     true_mu1 = [1, 0]
     true_mu2 = [np.cos(2*np.pi/3), np.sin(2*np.pi/3)]
     true_mu3 = [np.cos(4*np.pi/3), np.sin(4*np.pi/3)]
-    universal_coverage += gibbs(x, nom_coverage)#_gibbs(np.array(x), true_mu1, true_mu2, true_mu3, nom_coverage, 16 + 20*(nom_coverage))# gibbs(x, nom_coverage)
+    universal_coverage += _gibbs(np.array(x), true_mu1, true_mu2, true_mu3, nom_coverage, 30)# gibbs(x, nom_coverage)
 
     return (exact_coverage, universal_coverage)
 
@@ -115,7 +113,6 @@ def mc_iteration(nom_coverage):
 nom_coverages = np.linspace(0.01, 1, num=100)[80:-1]
 exact_coverages = []
 universal_coverages = []
-"""
 for nom_coverage in nom_coverages:
     print("Nominal Coverage:", nom_coverage)
     mc_iters = 1000
@@ -124,6 +121,8 @@ for nom_coverage in nom_coverages:
     exact_coverages.append(np.mean([ec for (ec, uc) in output]))
     universal_coverages.append(np.mean([uc for (ec, uc) in output]))
     print(exact_coverages, universal_coverages, flush = True)
+
+# Final results
 """
 exact_coverages = [0.036, 0.039, 0.057, 0.045, 0.048, 0.045, 0.044, 0.042, 0.037, 0.047, 0.052, 0.048, 0.051, 0.062, 0.056, 0.064, 0.051, 0.068, 0.066]
 universal_coverages = [0.836, 0.857, 0.856, 0.867, 0.892, 0.896, 0.896, 0.895, 0.932, 0.918, 0.932, 0.949, 0.962, 0.967, 0.983, 0.986, 0.986, 0.994, 0.999]
@@ -137,3 +136,4 @@ plt.title("Coverage of KMeans Centroid(s)")
 plt.legend(loc="center right")
 #plt.show()
 plt.savefig("kmeans_coverage.png")
+"""
