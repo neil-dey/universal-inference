@@ -65,7 +65,7 @@ normal_coverages = [0.835, 0.831, 0.836, 0.877, 0.866, 0.857, 0.881, 0.877, 0.87
 beta_coverages = [0.82, 0.825, 0.835, 0.854, 0.851, 0.865, 0.852, 0.876, 0.885, 0.894, 0.904, 0.931, 0.902, 0.939, 0.934, 0.954, 0.967, 0.981, 0.989] # Assume beta
 plt.scatter(nom_coverages, ramdas_coverages, color = "blue", label = "PrPl-EB")
 plt.scatter(nom_coverages, beta_coverages, color = "red", marker = "^", label = "Offline GUe (Beta)")
-plt.scatter(nom_coverages, normal_coverages, color = "gold", marker = "s", label = "Offline GUe (Normal)")
+plt.scatter(nom_coverages, normal_coverages, color = "gold", marker = "+", label = "Offline GUe (Normal)")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")

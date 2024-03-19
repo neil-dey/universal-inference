@@ -195,10 +195,11 @@ universal_coverages = [0.9766666666666667, 0.98, 0.9733333333333334, 0.976666666
 offline_coverages= [0.89, 0.9, 0.9166666666666666, 0.91, 0.8933333333333333, 0.91, 0.9266666666666666, 0.9366666666666666, 0.9433333333333334, 0.9533333333333334, 0.94, 0.9733333333333334, 0.9733333333333334, 0.98, 0.9833333333333333, 0.9833333333333333, 0.9933333333333333, 0.99, 1.0]
 
 plt.rcParams['text.usetex'] = True
-plt.title(r"Stopping Rule: 0 $\not\in\bar{X} \pm z_\alpha \sqrt{s^2/n}$")
+#plt.title(r"Stopping Rule: 0 $\not\in\bar{X} \pm z_\alpha \sqrt{s^2/n}$")
+plt.title("Effects of Optional Stopping of a True Null Hypothesis")
 plt.scatter(nom_coverages, exact_coverages, color="blue", label = "Exact CI")
 plt.scatter(nom_coverages, universal_coverages, color = "red", marker = "^", label = "Online GUe CS")
-plt.scatter(nom_coverages, offline_coverages, color = "gold", marker = "s", label = "Offline GUe CS")
+plt.scatter(nom_coverages, offline_coverages, color = "gold", marker = "+", label = "Offline GUe CS")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")

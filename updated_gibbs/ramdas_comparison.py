@@ -88,22 +88,17 @@ for nom_coverage in nom_coverages:
     print(ramdas_coverages)
     print(gibbs_coverages)
 
-"""
-offline_halfeq1 = [0.897, 0.906, 0.912, 0.918, 0.938, 0.923, 0.915, 0.938, 0.935, 0.941, 0.955, 0.956, 0.958, 0.968, 0.969, 0.964, 0.986, 0.983, 0.991]
-offline_eq1 = [0.788, 0.8, 0.818, 0.804, 0.825, 0.831, 0.822, 0.852, 0.854, 0.87, 0.859, 0.882, 0.883, 0.907, 0.92, 0.924, 0.935, 0.946, 0.961]
-online_eq1 = [0.975, 0.981, 0.985, 0.983, 0.988, 0.98, 0.977, 0.979, 0.988, 0.984, 0.987, 0.988, 0.988, 0.987, 0.992, 0.987, 0.995, 0.996, 0.994]
-"""
 ramdas_coverages = [0.998, 0.996, 1.0, 0.995, 0.998, 0.999, 0.996, 0.998, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0][-19:]
 beta_coverages = [0.79, 0.82, 0.83, 0.83, 0.84, 0.85, 0.85, 0.85, 0.87, 0.89, 0.92, 0.91, 0.91, 0.95, 0.95, 0.95, 0.97, 0.99, 1.0]
 normal_coverages = [0.8, 0.8, 0.81, 0.83, 0.84, 0.83, 0.87, 0.87, 0.87, 0.89, 0.89, 0.9, 0.93, 0.92, 0.91, 0.93, 0.96, 0.98, 0.99]
 
 plt.scatter(nom_coverages, ramdas_coverages, color = "blue", label = "PrPl-EB")
 plt.scatter(nom_coverages, beta_coverages, color = "red", marker = "^", label = "Online GUe (Beta)")
-plt.scatter(nom_coverages, normal_coverages, color = "gold", marker = "s", label = "Online GUe (Normal)")
+plt.scatter(nom_coverages, normal_coverages, color = "gold", marker = "+", label = "Online GUe (Normal)")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")
-plt.title("Coverage of i.i.d. Beta(5, 2) Sample: Online GUe")
+plt.title("Comparison of PrPl-EB and Online Gue")
 plt.legend()
 #plt.show()
 plt.savefig("online_ramdas.png")

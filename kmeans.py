@@ -129,11 +129,11 @@ exact_coverages = [0.036, 0.039, 0.057, 0.045, 0.048, 0.045, 0.044, 0.042, 0.037
 universal_coverages = [0.836, 0.857, 0.856, 0.867, 0.892, 0.896, 0.896, 0.895, 0.932, 0.918, 0.932, 0.949, 0.962, 0.967, 0.983, 0.986, 0.986, 0.994, 0.999]
 
 plt.scatter(nom_coverages, exact_coverages, color = "blue", label = "Bootstrapped CS")
-plt.scatter(nom_coverages, universal_coverages, color = "red", marker = "^", label = "GUI CS")
+plt.scatter(nom_coverages, universal_coverages, color = "red", marker = "^", label = "Offline GUe CS")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")
 plt.title("Coverage of KMeans Centroid(s)")
-plt.legend()
+plt.legend(loc="center right")
 #plt.show()
 plt.savefig("kmeans_coverage.png")

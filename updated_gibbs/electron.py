@@ -39,14 +39,15 @@ def gibbs(omega, data, true_value, alpha):
     ratio =  -omega * sum([(thetahat - x)**2 - (true_value - x)**2 for thetahat, x in zip(thetahats, data)])
     return ratio < np.log(1/alpha)
 
-for alpha in np.linspace(0.4, 0.5, num = 10):#[.05, .1, .2, .3, .4, .5]:
+for alpha in np.linspace(0.1, 1, num = 10):#[.05, .1, .2, .3, .4, .5]:
     bootstrap_iters = 100
     coverages = []
-    omegas = np.linspace(0, 1, 500)[1:]
+    omegas = np.linspace(0, 100, 500)[1:]
     for omega in omegas:
         coverage = 0
         for boot_iter in range(bootstrap_iters):
-            coverage += gibbs(omega, np.random.choice(data, size = len(data), replace = True), true_value, alpha)
+            boot_data = np.random.choice(data, size = len(data), replace = True)
+            coverage += gibbs(omega, boot_data, true_value, alpha)
         coverage /= bootstrap_iters
         coverages.append(coverage)
 

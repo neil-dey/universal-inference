@@ -191,10 +191,11 @@ for nom_coverage in nom_coverages:
 exact_coverages = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.2333333333333334]
 universal_coverages = [0.9366666666666666, 0.9333333333333333, 0.9433333333333334, 0.95, 0.9566666666666667, 0.96, 0.97, 0.97, 0.9733333333333334,0.9766666666666667, 0.9766666666666667, 0.9866666666666667, 0.99, 0.9933333333333333, 0.9966666666666667, 0.9966666666666667,  1.0, 1.0, 1.0]
 offline_coverages =  [0.94, 0.94, 0.94, 0.99, 0.93, 0.98, 0.91, 0.98, 0.97, 0.98, 0.99, 0.97, 1.0, 0.99, 0.98, 1.0, 1.0, 1.0, 1.0]
-plt.title("Stopping Rule: X̅< -10")
+#plt.title("Stopping Rule: X̅< -10")
+plt.title("Effects of Optional Stopping of a False Null Hypothesis")
 plt.scatter(nom_coverages, exact_coverages, color="blue", label = "Exact CI")
 plt.scatter(nom_coverages, universal_coverages, color = "red", marker = "^", label = "Online GUe CS")
-plt.scatter(nom_coverages, offline_coverages, color = "gold", marker = "s", label = "Offline Gue CS")
+plt.scatter(nom_coverages, offline_coverages, color = "gold", marker = "+", label = "Offline Gue CS")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")

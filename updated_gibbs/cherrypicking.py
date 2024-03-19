@@ -2,6 +2,9 @@ import numpy as np
 import scipy.stats as st
 import matplotlib.pyplot as plt
 
+DISTS = ["Normal", "Beta"]
+dist = 1
+
 np.random.seed(0)
 
 def _gibbs(omega, data, true_value, alpha):
@@ -61,23 +64,31 @@ for nom_coverage in nom_coverages:
     print(gibbs_coverages)
 
 
-exact_coverages = [0.72, 0.73, 0.73, 0.73, 0.73, 0.76, 0.78, 0.79, 0.79, 0.79, 0.81, 0.81, 0.81, 0.83, 0.85, 0.87, 0.9, 0.93, 0.94]
-gibbs_coverages = [0.94, 0.94, 0.94, 0.94, 0.95, 0.95, 0.95, 0.96, 0.96, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.99, 0.99] # N(0, 1)
-offline_coverages = [0.916, 0.922, 0.918, 0.931, 0.936, 0.94, 0.938, 0.944, 0.96, 0.954, 0.955, 0.96, 0.961, 0.957, 0.977, 0.978, 0.981, 0.984, 0.991] # N(0, 1)
+if dist == 0:
+    exact_coverages = [0.72, 0.73, 0.73, 0.73, 0.73, 0.76, 0.78, 0.79, 0.79, 0.79, 0.81, 0.81, 0.81, 0.83, 0.85, 0.87, 0.9, 0.93, 0.94]
+    gibbs_coverages = [0.94, 0.94, 0.94, 0.94, 0.95, 0.95, 0.95, 0.96, 0.96, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.99, 0.99] # N(0, 1)
+    offline_coverages = [0.916, 0.922, 0.918, 0.931, 0.936, 0.94, 0.938, 0.944, 0.96, 0.954, 0.955, 0.96, 0.961, 0.957, 0.977, 0.978, 0.981, 0.984, 0.991] # N(0, 1)
 
-exact_coverages = [0.655, 0.674, 0.624, 0.645, 0.68, 0.671, 0.681, 0.708, 0.717, 0.744, 0.741, 0.755, 0.765, 0.781, 0.797, 0.824, 0.841, 0.841, 0.868, 0.915][:-1] # Beta(5, 2)
-offline_coverages = [0.999, 0.999, 0.999, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0][:-1] # Beta(5, 2)
-gibbs_coverages = [1.0]*19
-print(len(exact_coverages))
-print(len(offline_coverages))
+else:
+    exact_coverages = [0.655, 0.674, 0.624, 0.645, 0.68, 0.671, 0.681, 0.708, 0.717, 0.744, 0.741, 0.755, 0.765, 0.781, 0.797, 0.824, 0.841, 0.841, 0.868, 0.915][:-1] # Beta(5, 2)
+    offline_coverages = [0.999, 0.999, 0.999, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0][:-1] # Beta(5, 2)
+    gibbs_coverages = [1.0]*19
 
 plt.scatter(nom_coverages, exact_coverages, color = "blue", label = "Exact CI")
 plt.scatter(nom_coverages, gibbs_coverages, color = "red", marker = "^", label = "Online GUe CS")
-plt.scatter(nom_coverages, offline_coverages, color = "gold", marker = "s", label = "Offline GUe CS")
+plt.scatter(nom_coverages, offline_coverages, color = "gold", marker = "+", label = "Offline GUe CS")
 plt.plot(nom_coverages, nom_coverages, color = "black")
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")
-plt.title("Outliers Removed: Normal Sample")
+
+if dist == 0:
+    plt.title("Effects of Outlier Removal in a Normal Sample")
+else:
+    plt.title("Effects of Outlier Removal in a Beta Sample")
 plt.legend()
 #plt.show()
-plt.savefig("./cherrypicked_beta.png")
+
+if dist == 0:
+    plt.savefig("./cherrypicked_normal.png")
+else:
+    plt.savefig("./cherrypicked_beta.png")
