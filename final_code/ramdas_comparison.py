@@ -50,7 +50,7 @@ def gibbs(mu, data, alpha):
     coverages = []
     omegas = np.linspace(0, 100, num = 100)[1:]
 
-    # For some reason, the nonparametric offline uses omega = infty a lot to come close to matching the correct coverage level at the lower confidence values.
+    # For some reason, the online versions use omega = infty a lot to even come close to matching the correct coverage levels on the bootstrapped sapmles at the lower confidence values.
     if mode == "online":
         omegas = np.linspace(0, 100, num = 100)
         omegas[0] = np.inf
@@ -73,9 +73,6 @@ def gibbs(mu, data, alpha):
         coverages.append(coverage)
 
     omega = omegas[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])]
-    print("    ", coverages[0])
-    print("    ", omega, coverages[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])])
-
     return _gibbs(mu, data, alpha, omega)
 
 
@@ -87,23 +84,23 @@ ramdas_coverages = []
 gibbs_coverages = []
 nom_coverages = np.linspace(0, 1, num = 100)[80:-1]
 for nom_coverage in nom_coverages:
-    continue
     print(nom_coverage)
     ramdas_coverage = 0
     gibbs_coverage = 0
     mc_iters = 100
     for it in range(mc_iters):
         data = P.rvs(size = 10)
-        #ramdas_coverage += ramdas(mu, data, 1 - nom_coverage)
+        ramdas_coverage += ramdas(mu, data, 1 - nom_coverage)
         gibbs_coverage += gibbs(mu, data, 1-nom_coverage)
-    #ramdas_coverage /= mc_iters
+    ramdas_coverage /= mc_iters
     gibbs_coverage /= mc_iters
-    #ramdas_coverages.append(ramdas_coverage)
+    ramdas_coverages.append(ramdas_coverage)
     gibbs_coverages.append(gibbs_coverage)
-    #print("Ramdas coverage:", ramdas_coverages)
+    print("Ramdas coverage:", ramdas_coverages)
     print("GUe coverage:", gibbs_coverages)
 
 
+exit()
 # Final Results
 ramdas_coverages = [0.998, 0.996, 1.0, 0.995, 0.998, 0.999, 0.996, 0.998, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0][-19:]
 online_beta_coverages = [0.967, 0.967, 0.967, 0.968, 0.968, 0.969, 0.97, 0.967, 0.969, 0.969, 0.97, 0.972, 0.972, 0.972, 0.975, 0.979, 0.98, 0.982, 0.988]

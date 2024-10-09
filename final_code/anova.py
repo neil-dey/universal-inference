@@ -19,22 +19,6 @@ sigma = 1
 
 nom_coverage = int(sys.argv[1])
 
-def progressbar(it, prefix="", size=60, out=sys.stdout): # Python3.6+
-    count = len(it)
-    start = time.time() # time estimate start
-    def show(j):
-        x = int(size*j/count)
-        # time estimate calculation and string
-        remaining = ((time.time() - start) / j) * (count - j)
-        mins, sec = divmod(remaining, 60) # limited to minutes
-        time_str = f"{int(mins):02}:{sec:03.1f}"
-        print(f"{prefix}[{u'█'*x}{('.'*(size-x))}] {j}/{count} Est wait {time_str}", end='\r', file=out, flush=True)
-    show(0.1) # avoid div/0
-    for i, item in enumerate(it):
-        yield item
-        show(i+1)
-    print("\n", flush=True, file=out)
-
 def loss(x, theta):
     return (x-theta)**2
 
@@ -73,19 +57,13 @@ def gibbs(true_theta, data, alpha, mode):
         coverages.append(coverage)
 
     omega = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
-    #print([(np.round(omega, 2), coverage) for (omega, coverage) in zip(omegas, coverages)])
-    #print("   " , omega, coverages[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])])
     return _gibbs(true_theta, data, alpha, omega, mode)
-
-
 
 
 exact_coverage = 0
 online_gue_coverage = 0
 offline_gue_coverage = 0
-for mc_iter in progressbar(range(mc_iters), str(np.round(nom_coverage, 0)) + " "):
-#for mc_iter in range(mc_iters):
-    continue
+for mc_iter in range(mc_iters):
     xs = np.array([theta + st.gamma.rvs(a = 1, loc = -sigma_alpha, scale = sigma_alpha) + st.gamma.rvs(a = 1, loc = -sigma_beta, scale = sigma_beta) + st.gamma.rvs(a = 1, loc = -sigma, scale = sigma) for _ in range(n)])
     thetahat = np.mean(xs)
 
@@ -108,14 +86,8 @@ for mc_iter in progressbar(range(mc_iters), str(np.round(nom_coverage, 0)) + " "
 print("Nominal Coverage:", nom_coverage/100, "\nBootstrap Coverage:", exact_coverage/mc_iters, "\nOnline Coverage:", online_gue_coverage/mc_iters, "\nOffline Coverage:", offline_gue_coverage/mc_iters, "\n", flush=True)
 
 
-
-# Normal coverages
-"""
-nom_coverages = [0.94, 0.92, 0.98, 0.93, 0.97, 0.9, 0.99, 0.95, 0.96, 0.91, 0.83, 0.89, 0.85, 0.88, 0.8, 0.87, 0.82, 0.81, 0.84, 0.86]
-exact_coverages = [0.882, 0.861, 0.923, 0.875, 0.913, 0.84, 0.938, 0.891, 0.899, 0.851, 0.763, 0.829, 0.783, 0.818, 0.736, 0.806, 0.754, 0.745, 0.773, 0.797]
-online_gue_coverages = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-offline_gue_coverages = [0.984, 0.975, 0.993, 0.979, 0.99, 0.974, 0.999, 0.984, 0.988, 0.974, 0.962, 0.973, 0.966, 0.973, 0.955, 0.972, 0.958, 0.956, 0.964, 0.97]
-"""
+exit()
+# Final Results
 nom_coverages = [0.92, 0.9, 0.91, 0.94, 0.87, 0.93, 0.88, 0.86, 0.89, 0.85, 0.82, 0.8, 0.84, 0.83, 0.81, 0.95, 0.97, 0.99, 0.98, 0.96]
 bootstrap_coverages = [0.806, 0.792, 0.801, 0.827, 0.767, 0.817, 0.778, 0.758, 0.787, 0.749, 0.727, 0.717, 0.744, 0.733, 0.722, 0.84, 0.875, 0.904, 0.888, 0.855]
 online_coverages = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]

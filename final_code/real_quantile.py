@@ -101,24 +101,6 @@ def gibbs_lr(xs, ys, tau, alpha, mode, boot_iters = 100):
     return omega, omega_coverages
 
 
-# My own sus version of the powell estimator. Some differences empirically depending on choice of h_n
-def sus_powell_estimator(features, ys, tau, p, alpha, qr):
-    p = len(poly_features[0]) + 1
-    var = np.zeros((p, p))
-    n = len(ratings)
-    h_n = 0.001*n**(-1/3)
-    c_n = np.var(ratings, ddof=1)**0.5 * (st.norm.ppf(tau + h_n) - st.norm.ppf(tau - h_n))
-    for idx, (x, y) in enumerate(zip(poly_features, ratings)):
-        if abs(y - qr.predict(np.array([x]))) < c_n:
-            var += np.array([np.hstack([1, x])]).T @ np.array([np.hstack([1, x])])
-    var /= (2*n*c_n)
-    Hinv = np.linalg.inv(var)
-
-    J =  sum([np.array([np.hstack([1, x])]).T @ np.array([np.hstack([1, x])]) for x in poly_features])/n
-    var = tau * (1-tau) * Hinv @ J @ Hinv
-    return var
-
-
 def rq_estimator(features, ys, tau, p, alpha, qr, modified = False):
     # Powell sandwich estimator---using same algorithm as rq package in R
     n = len(ys)
@@ -129,7 +111,7 @@ def rq_estimator(features, ys, tau, p, alpha, qr, modified = False):
     uhat =  ys - qr.predict(features)
     X_mat = np.c_[np.ones(n), features]
     h = (st.norm.ppf(tau + h) - st.norm.ppf(tau - h))*min([np.var(uhat, ddof=1)**0.5, (np.quantile(uhat, 0.75) - np.quantile(uhat, 0.25))/1.34])
-    if modified:
+    if modified: # "Fixed mode"
         h *= 10
     f = st.norm.pdf(uhat/h)/h
     fxxinv = np.eye(p)
@@ -162,7 +144,6 @@ def quantile_regress(xs, ys, tau, p = 2, alpha = 0.05, compute_variances = True)
         var_powell = rq_estimator(poly_features, ratings, tau, p, alpha, qr)
         var_sus = rq_estimator(poly_features, ratings, tau, p, alpha, qr, modified = True)
         var_bootstrap = bootstrap_estimator(poly_features, ratings, tau, 100)
-        #var_sus = sus_powell_estimator(ratings, tau, poly_features, qr)
         return qr, var_powell, var_bootstrap, var_sus
 
     return qr
@@ -203,6 +184,44 @@ for alpha, omega, color, marker in zip(alphas, omegas, colors, markers):
                 slopes.append(beta1)
     plt.scatter(intercepts, slopes, marker = marker, color = color, label = (str((1-alpha)*100) + "% GUe"))
 
+
+qr, var_powell, var_bootstrap, var_sus = quantile_regress(release_years, ratings, tau, p)
+plt.scatter([x * scale + center for x in release_years], ratings, marker = '.')
+xs = np.linspace(min(release_years), max(release_years), num = 100)
+poly = PolynomialFeatures(degree=p - 1, include_bias=False)
+poly_xs = poly.fit_transform(xs.reshape(-1, 1))
+plt.plot([x * scale + center for x in xs], [qr.predict([x]) for x in poly_xs], color = 'black')
+
+var = var_powell
+print("rq")
+print(var)
+plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) + 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'red', linestyle = 'dashed', label = "rq")
+plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) - 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'red', linestyle = 'dashed')
+
+var = var_sus
+print("Fixed")
+print(var)
+plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) + 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'cyan', linestyle = 'dotted', label = "Fixed")
+plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) - 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'cyan', linestyle = 'dotted')
+
+var = var_bootstrap
+print("Bootstrap")
+print(var)
+plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) + 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'purple', linestyle = 'dashdot', label = "Bootstrap")
+plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) - 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'purple', linestyle = 'dashdot')
+
+plt.xlabel("Year")
+plt.ylabel("Rating")
+plt.legend()
+plt.savefig("quantile_regression.svg")
+
+plt.clf()
+
+# NOTE TO PEOPLE WHO ARE MODIFYING THIS CODE
+# The variances rq_var, powell_var, and boot_var are all instances from a single run of the above code.
+# Really, you ought to just use var_powell, var_boostrap, and var_sus from above.
+# But that makes it annoying to generate these plots in 1 run so here's just the hardcoded variances.
+
 # Plot the 95% rq confidence set
 rq_var = np.array([[0.00875972, 0.1156339 ], [0.1156339,  1.81532241]])
 if toggle_2000:
@@ -239,39 +258,4 @@ if toggle_2000:
     plt.savefig("contour_plot_2000_only95_uncentered.svg")
 else:
     plt.savefig("contour_plot_only95_uncentered.svg")
-#plt.show()
-#plt.clf()
-exit()
-
-qr, var_powell, var_bootstrap, var_sus = quantile_regress(release_years, ratings, tau, p)
-plt.scatter([x * scale + center for x in release_years], ratings, marker = '.')
-xs = np.linspace(min(release_years), max(release_years), num = 100)
-poly = PolynomialFeatures(degree=p - 1, include_bias=False)
-poly_xs = poly.fit_transform(xs.reshape(-1, 1))
-plt.plot([x * scale + center for x in xs], [qr.predict([x]) for x in poly_xs], color = 'black')
-
-var = var_powell
-print("rq")
-print(var)
-plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) + 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'red', linestyle = 'dashed', label = "rq")
-plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) - 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'red', linestyle = 'dashed')
-
-var = var_sus
-print("sus")
-print(var)
-plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) + 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'cyan', linestyle = 'dotted', label = "Fixed")
-plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) - 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'cyan', linestyle = 'dotted')
-
-var = var_bootstrap
-print("Bootstrap")
-print(var)
-plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) + 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'purple', linestyle = 'dashdot', label = "Bootstrap")
-plt.plot([x * scale + center for x in xs], [qr.predict([poly_x]) - 1.96* (np.array([np.hstack([1, poly_x])]) @ var @ np.array([np.hstack([1, poly_x])]).T)[0] for poly_x in poly_xs], color = 'purple', linestyle = 'dashdot')
-
-#plt.ylim(0, 10)
-plt.xlabel("Year")
-plt.ylabel("Rating")
-#plt.yscale("log")
-plt.legend()
-#plt.show()
-plt.savefig("quantile_regression.svg")
+plt.clf()

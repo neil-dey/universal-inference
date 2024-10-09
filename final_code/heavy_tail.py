@@ -12,24 +12,6 @@ n = 10
 boot_iters = 100
 mc_iters = 1000
 
-nom_coverage = int(sys.argv[1])
-
-def progressbar(it, prefix="", size=60, out=sys.stdout): # Python3.6+
-    count = len(it)
-    start = time.time() # time estimate start
-    def show(j):
-        x = int(size*j/count)
-        # time estimate calculation and string
-        remaining = ((time.time() - start) / j) * (count - j)
-        mins, sec = divmod(remaining, 60) # limited to minutes
-        time_str = f"{int(mins):02}:{sec:03.1f}"
-        print(f"{prefix}[{u'█'*x}{('.'*(size-x))}] {j}/{count} Est wait {time_str}", end='\r', file=out, flush=True)
-    show(0.1) # avoid div/0
-    for i, item in enumerate(it):
-        yield item
-        show(i+1)
-    print("\n", flush=True, file=out)
-
 def loss(x, theta):
     return (x-theta)**2
 
@@ -57,8 +39,6 @@ def catoni(true_theta, data, true_variance, alpha):
     mid = sum([phi(np.sqrt(lambda_sq(i+1, s2, alpha)) * (x - true_theta)) for (i, x) in enumerate(data)])
 
     return lb <= mid and mid <= ub
-
-
 
 def _gibbs(true_theta, data, alpha, omega, mode):
     if mode == "off":
@@ -92,15 +72,9 @@ def gibbs(true_theta, data, alpha, mode):
         coverages.append(coverage)
 
     omega = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
-    #print([(np.round(omega, 2), coverage) for (omega, coverage) in zip(omegas, coverages)])
-    #print("   " , omega, coverages[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])])
     return _gibbs(true_theta, data, alpha, omega, mode)
 
-
-
-nom_coverages = [0.94, 0.91, 0.98, 0.96, 0.93, 0.95, 0.97, 0.92, 0.89, 0.9, 0.83, 0.82, 0.8, 0.81, 0.87, 0.86, 0.85, 0.88, 0.84]
-
-catoni_coverages = []
+nom_coverages = np.linspace(0, 1, num=100)[80:-1] * 100
 for nom_coverage in nom_coverages:
     exact_coverage = 0
     online_gue_coverage = 0
@@ -110,8 +84,7 @@ for nom_coverage in nom_coverages:
         xs = st.t.rvs(df=3, size = n)
         thetahat = np.mean(xs)
         s2 = st.t.stats(df=3)[1]
-        catoni_coverage += catoni(theta, xs, s2,  1-nom_coverage)
-        continue
+        catoni_coverage += catoni(theta, xs, s2,  1-nom_coverage/100)
 
         distances = []
         for _ in range(boot_iters):
@@ -129,19 +102,21 @@ for nom_coverage in nom_coverages:
         if gibbs(theta, xs, 1-nom_coverage/100, "off"):
             offline_gue_coverage += 1
 
-    catoni_coverages.append(catoni_coverage/mc_iters)
-    continue
     print("Nominal Coverage:", nom_coverage/100)
+    print("Catoni Coverage:", catoni_coverage/mc_iters)
     print("Bootstrap Coverage:", exact_coverage/mc_iters)
     print("Online Coverage:", online_gue_coverage/mc_iters)
     print("Offline Coverage:", offline_gue_coverage/mc_iters)
-print(catoni_coverages)
+    print()
 
+exit()
 
+# Final Results
 nom_coverages = [0.94, 0.91, 0.98, 0.96, 0.93, 0.95, 0.97, 0.92, 0.89, 0.9, 0.83, 0.82, 0.8, 0.81, 0.87, 0.86, 0.85, 0.88, 0.84]
 exact_coverages = [0.897, 0.859, 0.944, 0.921, 0.883, 0.908, 0.931, 0.871, 0.836, 0.848, 0.763, 0.755, 0.729, 0.739, 0.811, 0.795, 0.784, 0.821, 0.772]
 online_gue_coverages = [0.975, 0.966, 0.991, 0.981, 0.973, 0.978, 0.985, 0.968, 0.963, 0.967, 0.954, 0.952, 0.951, 0.953, 0.961, 0.96, 0.958, 0.962, 0.957]
 offline_gue_coverages = [0.964, 0.937, 0.996, 0.982, 0.952, 0.972, 0.99, 0.944, 0.922, 0.929, 0.892, 0.885, 0.879, 0.882, 0.917, 0.904, 0.902, 0.916, 0.898]
+catoni_coverages = [1.0, 0.999, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 0.998, 0.996, 0.999, 0.997, 0.992, 0.998, 0.998, 0.999, 0.997, 0.993]
 
 plt.title("Coverage of Mean with Heavy Tails")
 plt.scatter(nom_coverages, exact_coverages, color = "blue", label = "Bootstrapped CS")
