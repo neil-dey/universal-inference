@@ -9,21 +9,25 @@ mu0 = 5
 mu1 = 10
 cov = 10000
 c = (mu0 + mu1)/2
+#np.set_printoptions(threshold=np.inf)
 
+def emp_risk(theta, data):
+    x, y = data
+    return 1 if ((x <= theta and y == 1) or (x > theta and y == 0)) else 0
 
 """
 mu: The actual mean of the population data
 data: The x values
 datasequence: The y values (0/1) corresponding to each x in data
 """
-def _gibbs(mu, data, datasequence, nom_coverage, omega):
-
+def _gibbs(mu, data, datasequence):
     n = len(datasequence)
-    c_ests = np.zeros(n + 1)
+    c_ests = np.zeros(n + 1) # The estimated locations of the best separator; start at 0
 
     raw_data_head = np.array([]) # each entry is just x, but sorted
     data_head = np.empty(shape=(0, 3)) # each entry is (x, y, loss) sorted by x.
 
+    # Algorithm to efficiently get all n of the ERMS; done in O(n) time total
     n = 1
     xy_pairs = list(zip(data, datasequence))
     for x, y in xy_pairs:# zip(data, datasequence):
@@ -86,31 +90,35 @@ def _gibbs(mu, data, datasequence, nom_coverage, omega):
         c_ests[n] = data_head[np.argmin(data_head[:,2])][2]
         n += 1
 
-    def emp_risk(theta, data):
-        x, y = data
-        return 1 if ((x <= theta and y == 1) or (x > theta and y == 0)) else 0
-        #return len([x for (x, y) in data if (x <= theta and y == 1) or (x > theta and y == 0)])
-
-    def T(theta, omega):
-        return omega * sum([emp_risk(thetahat, z) - emp_risk(theta, z) for (thetahat, z) in zip(c_ests, xy_pairs)])
-        #return omega * sum([((x <= theta and y == 1) or (x > theta and y == 0)) for (x, y) in xy_pairs])
-        #return omega * sum([c_est_risks[i] - emp_risk(theta, xy_pairs[0:i+1]) for i in range(len(datasequence))])
-
-    # Check that confidence set contains mu
-    return T(mu, omega) >= np.log(1 - nom_coverage)
+    return [emp_risk(thetahat, z) - emp_risk(mu, z) for (thetahat, z) in zip(c_ests, xy_pairs)]
 
 def gibbs(mu, data, datasequence, nom_coverage):
+    alpha = 1 - nom_coverage
     boot_iters = 100
     coverages = []
-    omegas = np.linspace(0, 1, num = 20)[1:]
-    omegas = np.append(omegas, np.linspace(1, 10, num = 20))
-    #omegas = np.append(omegas, np.linspace(100, 1000, num = 100))
-    #omegas = np.append(omegas, np.linspace(1000, 10000000, num = 100))
-    for omega in omegas:
-        coverage = 0
+    omegas = np.linspace(0.01, 100, num = 10000)
+
+    # Find the minimum sample size we can work with
+    num_0s = 0
+    num_1s = 0
+    min_n = 0
+    for datum, dist in zip(data, datasequence):
+        min_n += 1
+        if dist == 0:
+            num_0s += 1
+        if dist == 1:
+            num_1s += 1
+        if num_0s != 0 and num_1s != 0:
+            break
+
+    omega_hats = np.zeros(len(data)+1)
+    step_size = max([1, len(data)//200])
+    for n in range(min_n + 1, len(data), step_size):
+        coverages = np.zeros(len(omegas))
         for _ in range(boot_iters):
+            # Bootstrap the first n data points (as long as an estimate can still be made from it)
             while True:
-                choices = np.random.choice(range(len(data)), size = len(data), replace = True)
+                choices = np.random.choice(range(n), size = n, replace = True)
                 boot_data = data[choices]
                 boot_datasequence = datasequence[choices]
 
@@ -127,16 +135,29 @@ def gibbs(mu, data, datasequence, nom_coverage):
                         num_1s += 1
                 if num_0s != 0 and num_1s != 0:
                     break
+
+            # Estimate the seperator
             boot_c = (sum_0s/num_0s + sum_1s/num_1s)/2
-            coverage += _gibbs(boot_c, boot_data, boot_datasequence, nom_coverage, omega)
+            # Get the losses incurred by the bootstrapped data
+            excess_losses = _gibbs(boot_c, boot_data, boot_datasequence)
+            # Compute the GUe-value on the first n-1 points, sinc the learning rate is already determined
+            log_gue_nminus1 = sum([omega_hats[i]*excess_losses[i] for i in range(n-1)])
 
-        coverage /= boot_iters
-        coverages.append(coverage)
+            for idx, omega in enumerate(omegas):
+                log_gue = log_gue_nminus1 + omega*excess_losses[-1]
+                coverages[idx] += log_gue < np.log(1/alpha)
+        coverages /= boot_iters
+        best_omega = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
+        for i in range(step_size):
+            if n+i < len(omega_hats):
+                omega_hats[n+i] = best_omega
 
-    omega = omegas[np.argmin([abs(nom_coverage - coverage) for coverage in coverages])]
-    return _gibbs(mu, data, datasequence, nom_coverage, omega)
+    excess_losses = _gibbs(mu, data, datasequence)
+    return sum([omega_hat * excess_loss for (omega_hat, excess_loss) in zip(omega_hats, excess_losses)]) < np.log(1/alpha)
+    #return _gibbs(mu, data, datasequence, nom_coverage, omega)
 
-def mc_iteration(nom_coverage):
+def mc_iteration(nom_coverage, iteration_num):
+    print(iteration_num)
     # Exact confidence interval
     exact_coverage = 0
     universal_coverage = 0
@@ -145,6 +166,7 @@ def mc_iteration(nom_coverage):
     n0 = 0
     n1 = 0
     while True:
+        # If making a point estimate is possible
         if n0 != 0 and n1 != 0:
             # Point estimate for (mu0 + mu1)/2
             c_est = (np.mean([x for (x, y) in zip(data, datasequence) if y == 0]) + np.mean([x for (x, y) in zip(data, datasequence) if y == 1]))/2
@@ -153,7 +175,7 @@ def mc_iteration(nom_coverage):
             z_alpha = st.norm.interval(nom_coverage)[1]
             CI = [c_est - z_alpha* ((n0 + n1)/(4*n0*n1) * cov)**0.5, c_est + z_alpha * ((n0 + n1)/(4*n0*n1) * cov)**0.5]
 
-        # If the confidence interval still includes the origin, collect more data and try again
+        # If the confidence interval still includes the origin, or we don't have enough data to make any estimate yet, collect more data and try again
         if (n0 == 0 or n1 == 0) or (CI[0] <= 0 and 0 <= CI[1]):
             if np.random.rand() < 0.5:
                 data = np.append(data, st.norm.rvs(loc = mu0, scale = cov**0.5, size = 1))
@@ -176,12 +198,13 @@ def mc_iteration(nom_coverage):
 
 
 nom_coverages = np.linspace(0, 1, num=100)[80:-1]
+nom_coverages = [0.9]
 exact_coverages = []
 universal_coverages = []
 for nom_coverage in nom_coverages:
     print("Nominal coverage:", round(nom_coverage, 2))
-    mc_iters = 300
-    output = [mc_iteration(nom_coverage) for _ in range(mc_iters)]
+    mc_iters = 100#300
+    output = [mc_iteration(nom_coverage, i) for i in range(mc_iters)]
 
     exact_coverages.append(np.mean([ec for (ec, uc) in output]))
     universal_coverages.append(np.mean([uc for (ec, uc) in output]))
