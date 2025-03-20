@@ -11,13 +11,11 @@ cov = 10000
 c = (mu0 + mu1)/2
 
 
-omega = 0.01
-
-def _gibbs(mu, data0, data1, nom_coverage, omega):
-    data0_train = data0[:len(data0)//2]
-    data0_test = sorted(data0[len(data0)//2:])
-    data1_train = data1[:len(data1)//2]
-    data1_test = sorted(data1[len(data1)//2:])
+def _gibbs(mu, data, add_to_training):
+    data0_train = [x for (x, y) in data[:len(data)//2+add_to_training] if y == 0]
+    data0_test = sorted([x for (x, y) in data[len(data)//2+add_to_training:] if y == 0])
+    data1_train = [x for (x, y) in data[:len(data)//2+add_to_training] if y == 1]
+    data1_test = sorted([x for (x, y) in data[len(data)//2+add_to_training:] if y == 1])
 
     raw_data = np.array([])
     train_data = np.empty(shape=(0, 2))
@@ -48,44 +46,65 @@ def _gibbs(mu, data0, data1, nom_coverage, omega):
         return err_count
         #return len([x for x in data1_test if x <= theta]) + len([x for x in data0_test if x > theta])
 
-    def T(theta, omega):
-        return (omega * (emp_risk_test(c_est) - emp_risk_test(theta)))
-
     # Check that confidence set contains mu
-    return T(mu, omega) >= np.log(1 - nom_coverage)
+    return emp_risk_test(c_est) - emp_risk_test(theta)
+    #return T(mu, omega) >= np.log(1 - nom_coverage)
 
-def gibbs(mu, data0, data1, nom_coverage):
+def gibbs(mu, data, nom_coverage):
     boot_iters = 100
-    coverages = []
-    omegas = np.linspace(0, 1, num = 20)[1:]
-    omegas = np.append(omegas, np.linspace(1, 10, num = 20))
-    #omegas = np.append(omegas, np.linspace(100, 1000, num = 100))
-    #omegas = np.append(omegas, np.linspace(1000, 10000000, num = 100))
-    for omega in omegas:
-        coverage = 0
-        for _ in range(boot_iters):
-            boot_data0 = np.random.choice(data0, size = len(data0), replace = True)
-            boot_data1 = np.random.choice(data1, size = len(data1), replace = True)
-            boot_c = (np.mean(data0) + np.mean(data1))/2
-            coverage += _gibbs(boot_c, boot_data0, boot_data1, nom_coverage, omega)
-        coverage /= boot_iters
-        coverages.append(coverage)
+    omegas = np.linspace(0.001, 10, num = 10000)
+    coverages = np.zeros(len(omegas))
+    i = 0
+    add_to_training = 0
+    num_fails = 0
+    while i <= boot_iters:
+        train_data = np.array(data[0:len(data)//2 + add_to_training])
+        indices = np.random.choice(range(len(train_data)), size = len(train_data), replace = True)
+        boot_data = train_data[indices]
+
+        if not [x for (x, y) in boot_data if y == 0] or not [x for (x, y) in boot_data if y == 1]:
+            num_fails += 1
+            if num_fails > 10:
+                num_fails = 0
+                add_to_training += 1
+            continue
+
+        boot_c = (np.mean([x for (x, y) in boot_data if y == 0]) + np.mean([x for (x, y) in boot_data if y == 1]))/2
+        log_gue = _gibbs(boot_c, boot_data, add_to_training)
+        for idx, omega in enumerate(omegas):
+            if omega*log_gue >= np.log(1-nom_coverage):
+                coverages[idx] += 1
+
+        num_fails = 0
+        i += 1
+    coverages /= boot_iters
 
     omega = omegas[np.argmin([abs(nom_coverage - coverage) for coverage in coverages])]
-    print("  omega:", omega)
-    return _gibbs(mu, data0, data1, nom_coverage, omega)
+    #print("  omega:", omega)
+    #print(add_to_training, len(data))
+    return omega * _gibbs(mu, data, add_to_training) >= np.log(1-nom_coverage)
 
 def mc_iteration(nom_coverage):
     # Exact confidence interval
     exact_coverage = 0
     universal_coverage = 0
-    data0 = st.norm.rvs(loc = mu0, scale = cov**0.5, size = 2)
-    data1 = st.norm.rvs(loc = mu1, scale = cov**0.5, size = 2)
-    n0 = 2
-    n1 = 2
+    data = []
+    n0 = 0
+    n1 = 0
     while True:
+        # Generate a new data point
+        if np.random.rand() < 0.5:
+            data.append((st.norm.rvs(loc = mu0, scale = cov**0.5, size = 1)[0], 0))
+            n0 += 1
+        else:
+            data.append((st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1)[0], 1))
+            n1 += 1
+
+        if n0 == 0 or n1 == 0:
+            continue
+
         # Point estimate for (mu0 + mu1)/2
-        c_est = (np.mean(data0) + np.mean(data1))/2
+        c_est = (np.mean([x for (x, y) in data if y == 0]) + np.mean([x for (x, y) in data if y == 1]))/2
 
         # (1-\alpha)100% confidence interval for (mu0 + mu1)/2
         z_alpha = st.norm.interval(nom_coverage)[1]
@@ -93,12 +112,6 @@ def mc_iteration(nom_coverage):
 
         # If the confidence interval still includes the origin, collect more data and try again
         if CI[0] <= 0 and 0 <= CI[1]:
-            if np.random.rand() < 0.5:
-                data0 = np.append(data0, st.norm.rvs(loc = mu0, scale = cov**0.5, size = 1))
-                n0 += 1
-            else:
-                data1 = np.append(data1, st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1))
-                n1 += 1
             continue
 
         # Otherwise, we stop collecting data and check if the confidence interval contains the true (mu0+mu1)/2
@@ -107,16 +120,16 @@ def mc_iteration(nom_coverage):
         break
 
     # Universal interval
-    universal_coverage = gibbs(c, data0, data1, nom_coverage)
+    universal_coverage = gibbs(c, data, nom_coverage)
     return (exact_coverage, universal_coverage)
 
 
-nom_coverages = np.linspace(0, 1, num=100)[80:-1]
+nom_coverages = np.linspace(0, 1, num=100)[90:-1]
 exact_coverages = []
 universal_coverages = []
 for nom_coverage in nom_coverages:
     print("Nominal coverage:", round(nom_coverage, 2))
-    mc_iters = 100
+    mc_iters = 300
     output = [mc_iteration(nom_coverage) for _ in range(mc_iters)]
 
     exact_coverages.append(np.mean([ec for (ec, uc) in output]))
