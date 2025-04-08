@@ -2,14 +2,14 @@ import numpy as np
 import scipy.stats as st
 import matplotlib.pyplot as plt
 
-np.random.seed(0)
+np.random.seed(1)
 
 # 1 dimensional
 mu0 = 5
 mu1 = 10
 cov = 10000
 c = (mu0 + mu1)/2
-#np.set_printoptions(threshold=np.inf)
+np.set_printoptions(threshold=np.inf)
 
 def emp_risk(theta, data):
     x, y = data
@@ -87,7 +87,7 @@ def _gibbs(mu, data, datasequence):
         data_head = np.insert(data_head, idx, [x, y, regret], axis = 0)
         raw_data_head = np.insert(raw_data_head, idx, x)
 
-        c_ests[n] = data_head[np.argmin(data_head[:,2])][2]
+        c_ests[n] = data_head[np.argmin(data_head[:,2])][0]
         n += 1
 
     return [emp_risk(thetahat, z) - emp_risk(mu, z) for (thetahat, z) in zip(c_ests, xy_pairs)]
@@ -112,7 +112,7 @@ def gibbs(mu, data, datasequence, nom_coverage):
             break
 
     omega_hats = np.zeros(len(data)+1)
-    step_size = 1# max([1, len(data)//200])
+    step_size = 1#max([1, len(data)//200])
     for n in range(min_n + 1, len(data), step_size):
         coverages = np.zeros(len(omegas))
         if n < 100:
@@ -151,13 +151,18 @@ def gibbs(mu, data, datasequence, nom_coverage):
             best_omega = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
             for i in range(step_size):
                 if n+i < len(omega_hats):
-                    omega_hats[n+i] = best_omega
+                    omega_hats[n+i] = st.trim_mean(np.append(omega_hats[:n+i], best_omega), 0.0)#*(1-1.01**-(n+1))
+                    #omega_hats[n+i] = best_omega#*(1-1.01**-(n+1))
+                    #print(n, omega_hats[n+i], (1-1.01**-(n+1)))
         else:
-            omega_hats[n] = np.mean(omega_hats[n-10:n-1])
-            #print(omega_hats[:n-1])
-            #print(np.mean(omega_hats[n-10:n-1]))
-            #exit()
+            omega_hats[n] = st.trim_mean(omega_hats[:n], 0.0)
+            if n == 100:
+                print(omega_hats[:n])
+                print(st.trim_mean(omega_hats[:n], 0.0))
 
+    print(omega_hats[:100])
+    print(omega_hats[-100:])
+    print(np.mean(omega_hats))
     excess_losses = _gibbs(mu, data, datasequence)
     return sum([omega_hat * excess_loss for (omega_hat, excess_loss) in zip(omega_hats, excess_losses)]) < np.log(1/alpha)
     #return _gibbs(mu, data, datasequence, nom_coverage, omega)
@@ -173,7 +178,7 @@ def mc_iteration(nom_coverage, iteration_num):
     n1 = 0
     while True:
         # If making a point estimate is possible
-        if n0 != 0 and n1 != 0:
+        if n0 >= 2 and n1 >= 2:
             # Point estimate for (mu0 + mu1)/2
             c_est = (np.mean([x for (x, y) in zip(data, datasequence) if y == 0]) + np.mean([x for (x, y) in zip(data, datasequence) if y == 1]))/2
 
@@ -182,7 +187,7 @@ def mc_iteration(nom_coverage, iteration_num):
             CI = [c_est - z_alpha* ((n0 + n1)/(4*n0*n1) * cov)**0.5, c_est + z_alpha * ((n0 + n1)/(4*n0*n1) * cov)**0.5]
 
         # If the confidence interval still includes the origin, or we don't have enough data to make any estimate yet, collect more data and try again
-        if (n0 == 0 or n1 == 0) or (CI[0] <= 0 and 0 <= CI[1]):
+        if (n0 < 2 or n1 < 2) or (CI[0] <= 0 and 0 <= CI[1]):
             if np.random.rand() < 0.5:
                 data = np.append(data, st.norm.rvs(loc = mu0, scale = cov**0.5, size = 1))
                 n0 += 1
@@ -206,7 +211,7 @@ def mc_iteration(nom_coverage, iteration_num):
 
 
 nom_coverages = np.linspace(0, 1, num=100)[80:-1]
-nom_coverages = [0.9]
+nom_coverages = [0.98]
 exact_coverages = []
 universal_coverages = []
 for nom_coverage in nom_coverages:
