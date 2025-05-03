@@ -6,6 +6,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from scipy.linalg import solve_triangular
 from itertools import product as cartesian_product
+import multiprocessing as mp
 
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
@@ -27,7 +28,6 @@ release_years = []
 ratings = []
 
 tau = 0.01
-alphas = [0.01, 0.05, 0.2]
 p = 2
 
 with open('anime.csv', 'r') as csvfile:
@@ -54,11 +54,12 @@ print(n)
 def emprisk(theta, xs, ys, tau):
     return sum([(y - theta @ np.c_[1, x][0]) * (tau - (y - theta @ np.c_[1, x][0] < 0)) for (x, y) in zip(xs, ys)])
 
-def _gibbs(true_theta, xs, ys, alpha, omega, mode, fix_subsample = False):
+def log_gue_over_omega(true_theta, xs, ys, mode, fix_subsample = False):
     if mode == "off":
         if fix_subsample:
-            np.random.seed(0)
-        indices = np.random.choice(len(ys), len(ys)//2, replace = False)
+            indices = [2*i+1 for i in range(len(ys)//2)]
+        else:
+            indices = np.random.choice(len(ys), len(ys)//2, replace = False)
         train_xs = xs[indices]
         test_xs = np.delete(xs, indices)
         train_ys = ys[indices]
@@ -67,34 +68,33 @@ def _gibbs(true_theta, xs, ys, alpha, omega, mode, fix_subsample = False):
         qr = quantile_regress(train_xs, train_ys, tau, compute_variances = False)
         thetahat = np.hstack([qr.intercept_, qr.coef_])
 
-        log_gue = -1*omega * (emprisk(thetahat, test_xs, test_ys, tau) - emprisk(true_theta, test_xs, test_ys, tau))
-    elif mode == "on":
+        log_gue_over_omega = -1 * (emprisk(thetahat, test_xs, test_ys, tau) - emprisk(true_theta, test_xs, test_ys, tau))
+    else:
         print("Not implemented yet")
         exit()
-        thetahats = np.zeros(len(data) + 1)
-        for idx, x in enumerate(data, start = 1):
-            thetahats[idx] = max(0, np.quantile(data[0:idx], QUANTILE))
 
-        log_gue = -1*omega*sum([online_loss(x, thetahat) - online_loss(x, true_theta) for (x, thetahat) in zip(data, thetahats)])
+    return log_gue_over_omega
 
-    return log_gue < np.log(1/alpha)
 
-def gibbs_lr(xs, ys, tau, alpha, mode, boot_iters = 100):
+def _gibbs(true_theta, xs, ys, alpha, omega, mode, fix_subsample = False):
+    return  omega * log_gue_over_omega(true_theta, xs, ys, mode, fix_subsample) < np.log(1/alpha)
+
+def gibbs_lr(xs, ys, tau, alpha, mode, boot_iters = 1000):
     qr = quantile_regress(xs, ys, tau, compute_variances = False)
     thetahat = np.hstack([qr.intercept_, qr.coef_])
-    coverages = []
     omegas = np.linspace(0, 50, num=500)[1:]
-    for omega in omegas:
-        print(omega)
-        coverage = 0
-        for _ in range(boot_iters):
-            indices = np.random.choice(len(ys), len(ys))
-            boot_xs = xs[indices]
-            boot_ys = ys[indices]
-            if _gibbs(thetahat, boot_xs, boot_ys, alpha, omega, mode):
-                coverage += 1
-        coverage /= boot_iters
-        coverages.append(coverage)
+
+    training_indices = [2*i + 1 for i in range(len(ys)//2)]
+
+    coverages = np.zeros(len(omegas))
+    for _ in range(boot_iters):
+        indices = np.random.choice(training_indices, len(training_indices))
+        boot_xs = xs[indices]
+        boot_ys = ys[indices]
+        lgoo =  log_gue_over_omega(thetahat, boot_xs, boot_ys, mode)
+        for idx, omega in enumerate(omegas):
+            coverages[idx] += (omega * lgoo < np.log(1/alpha))
+    coverages /= boot_iters
 
     omega = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
     omega_coverages = [(np.round(omega, 2), coverage) for (omega, coverage) in zip(omegas, coverages)]
@@ -150,40 +150,43 @@ def quantile_regress(xs, ys, tau, p = 2, alpha = 0.05, compute_variances = True)
 
 qr = quantile_regress(release_years, ratings, tau, p, compute_variances = False)
 
-#alpha = 0.05
-#omega, omega_coverages = gibbs_lr(release_years, ratings, tau, alpha, "off")
-#print(omega, omega_coverages)
+alpha = 0.05
+omega, omega_coverages = gibbs_lr(release_years, ratings, tau, alpha, "off")
+print(omega, omega_coverages)
 #exit()
 
 
 # Fit a linear regression on omega_coverages to get a learning rate for each alpha (data pre-1980)
-# For alpha = 0.01, we get a negative estimate for omega, so we use the first omega observed with empirical coverage 0.99
-omegas = [3.21, 10.1, 53.50]
+#omegas = [3.21, 10.1, 53.50]
+omega = 8.517034068136272
 if toggle_2000:
-    omegas = [3.41, 7.31, 24.45] #2000
-colors = ['purple', 'cyan', 'red']
-markers = ['.', 'x', '+']
+    #omegas = [3.41, 7.31, 24.45] #2000
+    omega = 5.110220440881764
+#colors = ['purple', 'cyan', 'red']
+#markers = ['.', 'x', '+']
 
-for alpha, omega, color, marker in zip(alphas, omegas, colors, markers):
-    if alpha != 0.05:
-        continue
-    intercepts = []
-    slopes = []
-    for beta0 in np.linspace(1, 4.5, num = 120):
-        if toggle_2000 and (beta0 < 3 or beta0 > 4.25):
-            continue
-        if (not toggle_2000) and beta0 > 4:
-            continue
-        for beta1 in np.linspace(-25, 30, num = 100):
-            if toggle_2000 and (beta1 < -3 or beta1 > 20):
-                continue
-            if (not toggle_2000) and (beta1 < -15 or beta1 > 15):
-                continue
-            if _gibbs(np.array([beta0, beta1]), release_years, ratings, alpha, omega, "off", True):
-                intercepts.append(beta0)
-                slopes.append(beta1)
-    plt.scatter(intercepts, slopes, marker = marker, color = color, label = (str((1-alpha)*100) + "% GUe"))
+#beta0s = [beta0 for beta0 in np.linspace(1, 4.5, num = 120) if (toggle_2000 and not (beta0 < 3 or beta0 > 4.25)) or (not toggle_2000 and beta0 <= 4)]
+#beta1s = [beta1 for beta1 in np.linspace(-25, 30, num = 100) if (toggle_2000 and not (beta1 < -3 or beta1 > 20)) or (not toggle_2000 and not (beta1 < -15 or beta1 > 15))]
+beta0s = np.linspace(2.5, 4.0, num = 100)
+beta1s = np.linspace(-15, 10, num = 100)
+if toggle_2000:
+    beta0s = np.linspace(3.0, 4.0, num = 67)
+    beta1s = np.linspace(-5, 15, num = 80)
 
+args = [(np.array([beta0, beta1]), release_years, ratings, alpha, omega, "off", True) for (beta0, beta1) in cartesian_product(beta0s, beta1s)]
+
+with mp.Pool(4) as pool:
+    marks = pool.starmap(_gibbs, args)
+
+intercepts = []
+slopes = []
+for (idx, beta) in enumerate(cartesian_product(beta0s, beta1s)):
+    if marks[idx]:
+        intercepts.append(beta[0])
+        slopes.append(beta[1])
+print(slopes)
+print(intercepts)
+print()
 
 qr, var_powell, var_bootstrap, var_sus = quantile_regress(release_years, ratings, tau, p)
 plt.scatter([x * scale + center for x in release_years], ratings, marker = '.')
@@ -248,6 +251,9 @@ rho = boot_var[0, 1]/np.sqrt(boot_var[0,0] * boot_var[1, 1])
 mat = (2**0.5*1.96) * np.sqrt(np.diag(np.diag(boot_var))) @ np.array([[1, -1], [1, 1]]) @ np.diag([(1+rho)**0.5, (1-rho)**0.5])
 ts = np.linspace(0, 2*np.pi, 100)
 plt.plot([(mat @ np.array([[np.cos(t)], [np.sin(t)]]))[0] + qr.intercept_ for t in ts], [(mat @ np.array([[np.cos(t)], [np.sin(t)]]))[1] + qr.coef_[0] for t in ts], color = 'black', linestyle = 'solid', label = '95% bootstrap')
+
+# Plot the 95% Gue confidence set
+plt.scatter(intercepts, slopes, marker = 'x', color = 'cyan', label = (str((1-alpha)*100) + "% GUe"))
 
 plt.xlim(2.5, 4.15)
 plt.ylim(-17.5, 20)

@@ -1,12 +1,8 @@
 import numpy as np
 import scipy.stats as st
-from scipy.optimize import brentq
-from scipy.integrate import dblquad
-from scipy.integrate import quad
-from scipy.optimize import fsolve
-from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 import sys
+import multiprocessing as mp
 
 np.random.seed(0)
 
@@ -32,48 +28,88 @@ def ramdas(mu, data, alpha, c = 1/2):
 
     return center - width <= mu and mu <= center+width
 
-def _gibbs(mu, data, alpha, omega):
-    if mode == "online":
-        thetahats = [np.mean(data[0: i+1]) for i in range(len(data))]
-        thetahats = [0.5] + thetahats
-        ratio =  -omega * sum([(thetahat - x)**2 - (mu - x)**2 for thetahat, x in zip(thetahats, data)])
-    elif mode == "offline":
-        thetahats = [np.mean(data[0:len(data)//2]) for i in range(len(data)//2)]
-        ratio =  -omega * sum([(thetahat - x)**2 - (mu - x)**2 for thetahat, x in zip(thetahats, data[len(data)//2:])])
-    else:
-        print("Unsupported mode")
-        exit()
-    return ratio < np.log(1/alpha)
-
-def gibbs(mu, data, alpha):
+def online_gue(mu, data, alpha):
     boot_iters = 100
     coverages = []
-    omegas = np.linspace(0, 100, num = 100)[1:]
+    omegas = np.linspace(0.1, 100, num = 1000)
+    omegas = omegas[::-1]
 
-    # For some reason, the online versions use omega = infty a lot to even come close to matching the correct coverage levels on the bootstrapped sapmles at the lower confidence values.
-    if mode == "online":
-        omegas = np.linspace(0, 100, num = 100)
-        omegas[0] = np.inf
-    boot_a, boot_b, _, _ = st.fit(st.beta, data, bounds = [(0, 10), (0, 10)]).params
-    for omega in omegas:
-        coverage = 0
+    omega_hats = np.zeros(len(data))
+    for n in range(0, len(data)):
+        coverages = np.zeros(len(omegas))
         for _ in range(boot_iters):
+            # Bootstrap the first n data points (as long as an estimate can still be made from it)
             if omega_mode == "parambootstrap_normal":
                 boot_data = st.norm(loc = np.mean(data), scale = np.var(data, ddof=1)**0.5).rvs(size = len(data))
             elif omega_mode == "parambootstrap_beta":
+                boot_a, boot_b, _, _ = st.fit(st.beta, data, bounds = [(0, 10), (0, 10)]).params
                 boot_data = st.beta(a = boot_a, b = boot_b).rvs(size = len(data))
             elif omega_mode == "nonparametric":
-                n = len(data)
-                boot_data = data[np.random.choice(n, n, replace = True)]
+                boot_data = data[np.random.choice(n+1, n+1, replace = True)]
             else:
                 print("Unsupported Mode")
                 exit()
-            coverage += _gibbs(np.mean(data), boot_data, alpha, omega)
-        coverage /= boot_iters
-        coverages.append(coverage)
 
-    omega = omegas[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])]
-    return _gibbs(mu, data, alpha, omega)
+
+            boot_erms = [np.mean(boot_data[0: i+1]) for i in range(len(boot_data))]
+            boot_erms = [0.5] + boot_erms
+            boot_mu = np.mean(data[:n+1])
+
+            excess_losses = [(thetahat - x)**2 - (boot_mu - x)**2 for (thetahat, x) in zip(boot_erms, boot_data)]
+            log_gue_over_omega = sum([-1*excess_losses[i] for i in range(n-1)])
+            for idx, omega in enumerate(omegas):
+                log_gue = omega*log_gue_over_omega
+                coverages[idx] += log_gue < np.log(1/alpha)
+        coverages /= boot_iters
+        omega_hats[n] = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
+
+    erms = [np.mean(data[0: i+1]) for i in range(len(data))]
+    erms = [0.5] + erms
+    excess_losses = [(thetahat - x)**2 - (mu - x)**2 for (thetahat, x) in zip(erms, data)]
+    return sum([-1*omega_hat * excess_loss for (omega_hat, excess_loss) in zip(omega_hats, excess_losses)]) < np.log(1/alpha)
+
+def offline_gue(mu, data, alpha):
+    boot_iters = 100
+    omegas = np.linspace(0.1, 100, num = 1000)
+
+    training = data[:len(data)//2]
+    validation = data[len(data)//2:]
+
+    coverages = np.zeros(len(omegas))
+    for _ in range(boot_iters):
+        # Bootstrap the first n data points (as long as an estimate can still be made from it)
+        if omega_mode == "parambootstrap_normal":
+            boot_data = st.norm(loc = np.mean(training), scale = np.var(data, ddof=1)**0.5).rvs(size = len(data))
+        elif omega_mode == "parambootstrap_beta":
+            boot_a, boot_b, _, _ = st.fit(st.beta, training, bounds = [(0, 10), (0, 10)]).params
+            boot_data = st.beta(a = boot_a, b = boot_b).rvs(size = len(data))
+        elif omega_mode == "nonparametric":
+            n = len(training)
+            boot_data = training[np.random.choice(n, len(data), replace = True)]
+        else:
+            print("Unsupported Mode")
+            exit()
+
+
+        thetahat = np.mean(boot_data[:len(boot_data)//2])
+        boot_mu = np.mean(training)
+        excess_losses = [(thetahat - x)**2 - (boot_mu - x)**2 for x in boot_data[len(boot_data)//2:]]
+        log_gue_over_omega = -1*sum(excess_losses)
+        for idx, omega in enumerate(omegas):
+            log_gue = omega*log_gue_over_omega
+            coverages[idx] += log_gue < np.log(1/alpha)
+    coverages /= boot_iters
+    omega = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
+
+    thetahat = np.mean(training)
+    excess_losses = [(thetahat - x)**2 - (mu - x)**2 for x in validation]
+    return -1*omega* sum(excess_losses) < np.log(1/alpha)
+
+def gibbs(mu, data, alpha):
+    if mode == "online":
+        return online_gue(mu, data, alpha)
+
+    return offline_gue(mu, data, alpha)
 
 
 
@@ -82,16 +118,15 @@ mu = P.stats()[0]
 
 ramdas_coverages = []
 gibbs_coverages = []
-nom_coverages = np.linspace(0, 1, num = 100)[80:-1]
+nom_coverages = np.linspace(0, 1, num = 100)[95:-1]
 for nom_coverage in nom_coverages:
     print(nom_coverage)
     ramdas_coverage = 0
     gibbs_coverage = 0
     mc_iters = 100
-    for it in range(mc_iters):
-        data = P.rvs(size = 10)
-        ramdas_coverage += ramdas(mu, data, 1 - nom_coverage)
-        gibbs_coverage += gibbs(mu, data, 1-nom_coverage)
+    with mp.Pool(4) as p:
+        results = p.starmap(gibbs, [(mu, P.rvs(size = 10), 1-nom_coverage) for it in range(mc_iters)])
+        gibbs_coverage += sum(results)
     ramdas_coverage /= mc_iters
     gibbs_coverage /= mc_iters
     ramdas_coverages.append(ramdas_coverage)
@@ -101,33 +136,16 @@ for nom_coverage in nom_coverages:
 
 
 exit()
-# Final Results
+# New results
 ramdas_coverages = [0.998, 0.996, 1.0, 0.995, 0.998, 0.999, 0.996, 0.998, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0][-19:]
-online_beta_coverages = [0.967, 0.967, 0.967, 0.968, 0.968, 0.969, 0.97, 0.967, 0.969, 0.969, 0.97, 0.972, 0.972, 0.972, 0.975, 0.979, 0.98, 0.982, 0.988]
-online_normal_coverages = [0.975, 0.974, 0.974, 0.975, 0.977, 0.977, 0.977, 0.978, 0.978, 0.977, 0.978, 0.98, 0.979, 0.981, 0.982, 0.986, 0.988, 0.992, 0.993]
-online_nonparametric = [0.979, 0.965, 0.958, 0.963, 0.97, 0.973, 0.96, 0.972, 0.973, 0.969, 0.973, 0.973, 0.97, 0.984, 0.969, 0.977, 0.982, 0.982, 0.993]
-plt.scatter(nom_coverages, ramdas_coverages, color = "purple", marker = "x", label = "PrPl-EB")
-plt.scatter(nom_coverages, online_beta_coverages, color = "red", marker = "^", label = "Online GUe (Beta)")
-plt.scatter(nom_coverages, online_normal_coverages, color = "gold", marker = "+", label = "Online GUe (Normal)")
-plt.scatter(nom_coverages, online_nonparametric, color = "blue", label = "Online GUe (Nonparametric)")
-plt.plot(nom_coverages, nom_coverages, color = "black")
-plt.xlabel("Nominal Coverage")
-plt.ylabel("Observed Coverage")
-plt.title("Comparison of PrPl-EB and Online Gue")
-plt.legend()
-plt.savefig("ramdas_online.svg")
-plt.clf()
+online_nonparametric = [np.float64(0.9586), np.float64(0.9518), np.float64(0.9578), np.float64(0.9596), np.float64(0.9602), np.float64(0.9606), np.float64(0.9606), np.float64(0.9592), np.float64(0.956), np.float64(0.9564), np.float64(0.9646), np.float64(0.9626), np.float64(0.968), np.float64(0.9692), np.float64(0.973), np.float64(0.9696), np.float64(0.976), np.float64(0.98), np.float64(0.9836)]
 
-offline_normal_coverages = [0.874, 0.88, 0.889, 0.891, 0.891, 0.897, 0.906, 0.912, 0.919, 0.925, 0.927, 0.932, 0.944, 0.954, 0.959, 0.967, 0.98, 0.988, 0.997]
-offline_beta_coverages= [0.872, 0.875, 0.877, 0.88, 0.885, 0.897, 0.902, 0.908, 0.914, 0.918, 0.921, 0.93, 0.935, 0.94, 0.949, 0.958, 0.965, 0.979, 0.993]
-offline_nonparametric = [0.857, 0.871, 0.885, 0.884, 0.879, 0.909, 0.893, 0.909, 0.912, 0.93, 0.923, 0.919, 0.936, 0.952, 0.961, 0.952, 0.964, 0.981, 0.994]
-plt.scatter(nom_coverages, ramdas_coverages, color = "purple", marker = "x", label = "PrPl-EB")
-plt.scatter(nom_coverages, offline_beta_coverages, color = "red", marker = "^", label = "Offline GUe (Beta)")
-plt.scatter(nom_coverages, offline_normal_coverages, color = "gold", marker = "+", label = "Offline GUe (Normal)")
-plt.scatter(nom_coverages, offline_nonparametric, color = "blue", label = "Offline GUe (Nonparametric)")
-plt.plot(nom_coverages, nom_coverages, color = "black")
-plt.xlabel("Nominal Coverage")
-plt.ylabel("Observed Coverage")
-plt.title("Comparison of PrPl-EB and Offline Gue")
+offline_nonparametric = [np.float64(0.8846), np.float64(0.8822), np.float64(0.8948), np.float64(0.8858), np.float64(0.909), np.float64(0.9026), np.float64(0.9162), np.float64(0.9268), np.float64(0.9194), np.float64(0.9296), np.float64(0.9366), np.float64(0.9458), np.float64(0.9442), np.float64(0.9528), np.float64(0.9622), np.float64(0.9666), np.float64(0.9778), np.float64(0.9858), np.float64(0.9934)]
+
+plt.plot(nom_coverages, nom_coverages, color = 'black')
+plt.scatter(nom_coverages, online_nonparametric, color = 'blue', label = "Online GUe")
+plt.scatter(nom_coverages, offline_nonparametric, color = 'red', marker = "^", label = "Offline GUe")
+plt.scatter(nom_coverages, ramdas_coverages, color = 'purple', marker = "x", label = "PrPl-EB")
 plt.legend()
-plt.savefig("ramdas_offline.svg")
+plt.savefig("new_ramdas.svg")
+exit()
