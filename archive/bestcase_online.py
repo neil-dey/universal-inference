@@ -20,15 +20,15 @@ mu: The actual mean of the population data
 data: The x values
 datasequence: The y values (0/1) corresponding to each x in data
 """
-def _gibbs(mu, data, datasequence):
+def get_erms(data, datasequence):
     n = len(datasequence)
-    c_ests = np.zeros(n + 1) # The estimated locations of the best separator; start at 0
+    c_ests = np.zeros(n) # The estimated locations of the best separator
 
     raw_data_head = np.array([]) # each entry is just x, but sorted
     data_head = np.empty(shape=(0, 3)) # each entry is (x, y, loss) sorted by x.
 
     # Algorithm to efficiently get all n of the ERMS; done in O(n) time total
-    n = 1
+    n = 0
     xy_pairs = list(zip(data, datasequence))
     for x, y in xy_pairs:# zip(data, datasequence):
         idx = np.searchsorted(raw_data_head, x, side = "left")
@@ -89,6 +89,14 @@ def _gibbs(mu, data, datasequence):
 
         c_ests[n] = data_head[np.argmin(data_head[:,2])][0]
         n += 1
+    return c_ests
+
+def _gibbs(mu, data, datasequence, erms = None):
+    if erms is None:
+        c_ests = get_erms(data, datasequence)
+    else:
+        c_ests = erms
+    xy_pairs = list(zip(data, datasequence))
 
     return [emp_risk(thetahat, z) - emp_risk(mu, z) for (thetahat, z) in zip(c_ests, xy_pairs)]
 
@@ -96,8 +104,10 @@ def gibbs(mu, data, datasequence, nom_coverage):
     alpha = 1 - nom_coverage
     boot_iters = 100
     coverages = []
-    omegas = np.linspace(0.001, 10, num = 10000)
+    omegas = np.linspace(0.01, 100, num = 10000)
+    omegas = omegas[::-1]
 
+    """
     # Find the minimum sample size we can work with
     num_0s = 0
     num_1s = 0
@@ -110,10 +120,12 @@ def gibbs(mu, data, datasequence, nom_coverage):
             num_1s += 1
         if num_0s != 0 and num_1s != 0:
             break
+    """
+    min_n = 1
 
-    omega_hats = np.zeros(len(data)+1)
+    omega_hats = np.zeros(len(data))
     step_size = 1#max([1, len(data)//200])
-    for n in range(min_n + 1, len(data), step_size):
+    for n in range(min_n, len(data) + 1, step_size):
         coverages = np.zeros(len(omegas))
         if n < 100:
             for _ in range(boot_iters):
@@ -123,6 +135,7 @@ def gibbs(mu, data, datasequence, nom_coverage):
                     boot_data = data[choices]
                     boot_datasequence = datasequence[choices]
 
+                    """
                     sum_0s = 0
                     num_0s = 0
                     sum_1s = 0
@@ -136,34 +149,45 @@ def gibbs(mu, data, datasequence, nom_coverage):
                             num_1s += 1
                     if num_0s != 0 and num_1s != 0:
                         break
+                    """
+                    break
 
                 # Estimate the seperator
-                boot_c = (sum_0s/num_0s + sum_1s/num_1s)/2
+                #boot_c = (sum_0s/num_0s + sum_1s/num_1s)/2
+                boot_erms = get_erms(boot_data, boot_datasequence)
+                boot_c = boot_erms[-1]
                 # Get the losses incurred by the bootstrapped data
-                excess_losses = _gibbs(boot_c, boot_data, boot_datasequence)
+                excess_losses = _gibbs(boot_c, boot_data, boot_datasequence, boot_erms)
+                """
                 # Compute the GUe-value on the first n-1 points, sinc the learning rate is already determined
                 log_gue_nminus1 = sum([omega_hats[i]*excess_losses[i] for i in range(n-1)])
 
                 for idx, omega in enumerate(omegas):
                     log_gue = log_gue_nminus1 + omega*excess_losses[-1]
                     coverages[idx] += log_gue < np.log(1/alpha)
+                """
+                log_gue_over_omega = sum([-1*excess_losses[i] for i in range(n)])
+                for idx, omega in enumerate(omegas):
+                    log_gue = omega*log_gue_over_omega
+                    coverages[idx] += log_gue < np.log(1/alpha)
             coverages /= boot_iters
             best_omega = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
             for i in range(step_size):
-                if n+i < len(omega_hats):
-                    omega_hats[n+i] = st.trim_mean(np.append(omega_hats[:n+i], best_omega), 0.0)#*(1-1.01**-(n+1))
+                if n+i - 1 < len(omega_hats):
+                    omega_hats[n - 1+i] = best_omega #st.trim_mean(np.append(omega_hats[:n+i], best_omega), 0.0)#*(1-1.01**-(n+1))
                     #omega_hats[n+i] = best_omega#*(1-1.01**-(n+1))
                     #print(n, omega_hats[n+i], (1-1.01**-(n+1)))
         else:
-            omega_hats[n] = st.trim_mean(omega_hats[:n], 0.0)
-            if n == 100:
-                print(omega_hats[:n])
-                print(st.trim_mean(omega_hats[:n], 0.0))
+            omega_hats[n] = omega_hats[99]#st.trim_mean(omega_hats[:n], 0.0)
+            #print(omega_hats[:n])
+            #print(st.trim_mean(omega_hats[:n], 0.0))
 
     print(omega_hats[:100])
-    print(omega_hats[-100:])
-    print(np.mean(omega_hats))
+    #print(omega_hats[-100:])
+    print("    Mean omega: ", np.mean(omega_hats))
     excess_losses = _gibbs(mu, data, datasequence)
+    print("    Log_Gue: ", sum([omega_hat * excess_loss for (omega_hat, excess_loss) in zip(omega_hats, excess_losses)]), np.log(1/alpha))
+    print("    Log_Gue < 0: ", sum([omega_hat * excess_loss for (omega_hat, excess_loss) in zip(omega_hats, excess_losses)]) < 0)
     return sum([omega_hat * excess_loss for (omega_hat, excess_loss) in zip(omega_hats, excess_losses)]) < np.log(1/alpha)
     #return _gibbs(mu, data, datasequence, nom_coverage, omega)
 
@@ -204,14 +228,13 @@ def mc_iteration(nom_coverage, iteration_num):
         break
 
     # Universal interval
-    print("    ", str(n0+n1))
+    print("    Sample Size:", str(n0+n1))
     universal_coverage = gibbs(c, data, datasequence, nom_coverage)
-    print("    ", universal_coverage)
+    print("    Result:", universal_coverage)
     return (exact_coverage, universal_coverage)
 
 
 nom_coverages = np.linspace(0, 1, num=100)[80:-1]
-nom_coverages = [0.98]
 exact_coverages = []
 universal_coverages = []
 for nom_coverage in nom_coverages:

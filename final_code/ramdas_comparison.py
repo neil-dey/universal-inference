@@ -32,7 +32,7 @@ def online_gue(mu, data, alpha):
     boot_iters = 100
     coverages = []
     omegas = np.linspace(0.1, 100, num = 1000)
-    omegas = omegas[::-1]
+    #omegas = omegas[::-1]
 
     omega_hats = np.zeros(len(data))
     for n in range(0, len(data)):
@@ -118,12 +118,13 @@ mu = P.stats()[0]
 
 ramdas_coverages = []
 gibbs_coverages = []
-nom_coverages = np.linspace(0, 1, num = 100)[95:-1]
+nom_coverages = np.linspace(0, 1, num = 100)[80:-1]
 for nom_coverage in nom_coverages:
+    continue
     print(nom_coverage)
     ramdas_coverage = 0
     gibbs_coverage = 0
-    mc_iters = 100
+    mc_iters = 5000
     with mp.Pool(4) as p:
         results = p.starmap(gibbs, [(mu, P.rvs(size = 10), 1-nom_coverage) for it in range(mc_iters)])
         gibbs_coverage += sum(results)
@@ -135,10 +136,9 @@ for nom_coverage in nom_coverages:
     print("GUe coverage:", gibbs_coverages)
 
 
-exit()
 # New results
 ramdas_coverages = [0.998, 0.996, 1.0, 0.995, 0.998, 0.999, 0.996, 0.998, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0][-19:]
-online_nonparametric = [np.float64(0.9586), np.float64(0.9518), np.float64(0.9578), np.float64(0.9596), np.float64(0.9602), np.float64(0.9606), np.float64(0.9606), np.float64(0.9592), np.float64(0.956), np.float64(0.9564), np.float64(0.9646), np.float64(0.9626), np.float64(0.968), np.float64(0.9692), np.float64(0.973), np.float64(0.9696), np.float64(0.976), np.float64(0.98), np.float64(0.9836)]
+online_nonparametric = [np.float64(0.947), np.float64(0.9468), np.float64(0.9428), np.float64(0.9488), np.float64(0.9534), np.float64(0.9488), np.float64(0.9522), np.float64(0.9566), np.float64(0.9568), np.float64(0.961), np.float64(0.9646), np.float64(0.9698), np.float64(0.9668), np.float64(0.9638), np.float64(0.9736), np.float64(0.976), np.float64(0.9822), np.float64(0.9874), np.float64(0.9926)]
 
 offline_nonparametric = [np.float64(0.8846), np.float64(0.8822), np.float64(0.8948), np.float64(0.8858), np.float64(0.909), np.float64(0.9026), np.float64(0.9162), np.float64(0.9268), np.float64(0.9194), np.float64(0.9296), np.float64(0.9366), np.float64(0.9458), np.float64(0.9442), np.float64(0.9528), np.float64(0.9622), np.float64(0.9666), np.float64(0.9778), np.float64(0.9858), np.float64(0.9934)]
 

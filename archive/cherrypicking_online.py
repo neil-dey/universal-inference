@@ -7,32 +7,37 @@ np.random.seed(0)
 
 dist = int(sys.argv[1])
 
-def _gibbs(omega, data, true_value, alpha):
-    thetahats = [np.mean(data[0: i+1]) for i in range(len(data))]
-    thetahats = [0] + thetahats
-
-    ratio =  -omega * sum([(thetahat - x)**2 - (true_value - x)**2 for thetahat, x in zip(thetahats, data)])
-    return ratio < np.log(1/alpha)
-
-def gibbs(data, true_value, alpha):
-    bootstrap_iters = 100
+def online_gue(data, true_value, alpha):
+    boot_iters = 100
     coverages = []
-    omegas = np.linspace(0, 100, 100)[1:]
-    for omega in omegas:
-        coverage = 0
-        for boot_iter in range(bootstrap_iters):
-            coverage += _gibbs(omega, np.random.choice(data, size = len(data), replace = True), true_value, alpha)
-        coverage /= bootstrap_iters
-        coverages.append(coverage)
+    omegas = np.linspace(1, 100, num = 1000)
+    omegas = omegas[::-1]
 
-    omega = omegas[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])]
+    omega_hats = np.zeros(len(data))
+    for n in range(1, len(data)):
+        coverages = np.zeros(len(omegas))
+        for _ in range(boot_iters):
+            boot_data = data[np.random.choice(len(data), len(data), replace = True)]
 
-    #print("    ", omega)
-    return _gibbs(omega, data, true_value, alpha)
+            boot_erms = [np.mean(boot_data[0: i+1]) for i in range(len(boot_data))]
+            boot_erms = [1] + boot_erms
+            boot_mu = boot_erms[-1]
 
+            excess_losses = [(thetahat - x)**2 - (boot_mu - x)**2 for (thetahat, x) in zip(boot_erms, boot_data)]
+            log_gue_over_omega = sum([-1*excess_losses[i] for i in range(n)])
+            for idx, omega in enumerate(omegas):
+                log_gue = omega*log_gue_over_omega
+                coverages[idx] += log_gue < np.log(1/alpha)
+        coverages /= boot_iters
+        omega_hats[n - 1] = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
+
+    erms = [np.mean(data[0: i+1]) for i in range(len(data))]
+    erms = [0.5] + erms
+    excess_losses = [(thetahat - x)**2 - (mu - x)**2 for (thetahat, x) in zip(erms, data)]
+    return sum([-1*omega_hat * excess_loss for (omega_hat, excess_loss) in zip(omega_hats, excess_losses)]) < np.log(1/alpha)
 
 if dist == 0:
-    P = st.norm()
+    P = st.triang(c=0.5, scale = 2)
 else:
     P = st.beta(a=5, b=2)
 nom_coverages = np.linspace(0.8, 0.99, num=20)[:-1]
@@ -66,18 +71,6 @@ for nom_coverage in nom_coverages:
     print(gibbs_coverages)
 
 
-# Final results
-"""
-# Normal
-exact_coverages = [0.72, 0.73, 0.73, 0.73, 0.73, 0.76, 0.78, 0.79, 0.79, 0.79, 0.81, 0.81, 0.81, 0.83, 0.85, 0.87, 0.9, 0.93, 0.94]
-gibbs_coverages = [0.94, 0.94, 0.94, 0.94, 0.95, 0.95, 0.95, 0.96, 0.96, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.99, 0.99] # N(0, 1)
-offline_coverages = [0.916, 0.922, 0.918, 0.931, 0.936, 0.94, 0.938, 0.944, 0.96, 0.954, 0.955, 0.96, 0.961, 0.957, 0.977, 0.978, 0.981, 0.984, 0.991] # N(0, 1)
-
-# Beta
-exact_coverages = [0.655, 0.674, 0.624, 0.645, 0.68, 0.671, 0.681, 0.708, 0.717, 0.744, 0.741, 0.755, 0.765, 0.781, 0.797, 0.824, 0.841, 0.841, 0.868, 0.915][:-1] # Beta(5, 2)
-offline_coverages = [0.999, 0.999, 0.999, 0.999, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0][:-1] # Beta(5, 2)
-gibbs_coverages = [1.0]*19
-
 plt.scatter(nom_coverages, exact_coverages, color = "blue", label = "Exact CI")
 plt.scatter(nom_coverages, gibbs_coverages, color = "red", marker = "^", label = "Online GUe CS")
 plt.scatter(nom_coverages, offline_coverages, color = "gold", marker = "+", label = "Offline GUe CS")
@@ -92,4 +85,3 @@ plt.legend()
 
 plt.savefig("./cherrypicked_normal.png")
 plt.savefig("./cherrypicked_beta.png")
-"""

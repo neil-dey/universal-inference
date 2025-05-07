@@ -1,9 +1,8 @@
 import numpy as np
 import scipy.stats as st
-from scipy.optimize import minimize_scalar
 import matplotlib.pyplot as plt
 import sys
-import time
+import multiprocessing as mp
 
 np.random.seed(0)
 
@@ -17,53 +16,80 @@ sigma_alpha = 1/n
 sigma_beta = 1/(2*n)
 sigma = 1
 
-nom_coverage = int(sys.argv[1])
-
 def loss(x, theta):
     return (x-theta)**2
 
-def emprisk(theta, xs):
-    return sum([loss(x, theta) for x in xs])
+def emp_risk(theta, xs):
+    return np.mean([loss(x, theta) for x in xs])
 
-def _gibbs(true_theta, data, alpha, omega, mode):
-    if mode == "off":
-        train_data = data[0:len(data)//2]
-        test_data = data[len(data)//2:]
-        thetahat = np.mean(train_data)
-        log_gue = -1*omega * (emprisk(thetahat, test_data) - emprisk(true_theta, test_data))
+def log_gue_over_omega_fn(data, true_value):
+    data_train = data[:len(data)//2]
+    data_test = data[len(data)//2:]
+    return -1 * len(data_test) * (emp_risk(np.mean(data_train), data_test) - emp_risk(true_value, data_test))
 
-    elif mode == "on":
-        thetahats = np.zeros(len(data) + 1)
-        running_sum = 0
-        for idx, x in enumerate(data, start = 1):
-            running_sum += x
-            thetahats[idx] = running_sum/idx
+def offline_gue(data, true_value, alpha):
+    bootstrap_iters = 100
+    omegas = np.linspace(0, 3, 100)[1:]
+    coverages = np.zeros(len(omegas))
 
-        log_gue = -1*omega*sum([loss(x, thetahat) - loss(x, true_theta) for (x, thetahat) in zip(data, thetahats)])
+    data_train = data[:len(data)//2]
+    data_test = data[len(data)//2:]
 
-    return log_gue < np.log(1/alpha)
+    for boot_iter in range(bootstrap_iters):
+        boot_data = data_train[np.random.choice(len(data_train), size = len(data_train), replace = True)]
+        lgoo = log_gue_over_omega_fn(boot_data, np.mean(data_train))
+        for idx, omega in enumerate(omegas):
+            coverages[idx] += (omega * lgoo < np.log(1/alpha))
+    coverages /= bootstrap_iters
 
-def gibbs(true_theta, data, alpha, mode):
-    thetahat = np.mean(data)
+    omega = omegas[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])]
+
+    #print(coverages)
+    #print("    ", omega, coverages[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])])
+    return omega * log_gue_over_omega_fn(data, true_value) < np.log(1/alpha)
+
+def online_gue(data, true_value, alpha):
+    boot_iters = 100
     coverages = []
-    omegas = np.linspace(0, 3, num=100)[1:]
-    for omega in omegas:
-        coverage = 0
+    omegas = np.linspace(0, 3, num = 100)[1:]
+
+    omega_hats = np.zeros(len(data))
+    for n in range(0, len(data)):
+        coverages = np.zeros(len(omegas))
         for _ in range(boot_iters):
-            boot_data = np.random.choice(data, size = len(data), replace = True)
-            if _gibbs(thetahat, boot_data, alpha, omega, mode):
-                coverage += 1
-        coverage /= boot_iters
-        coverages.append(coverage)
-
-    omega = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
-    return _gibbs(true_theta, data, alpha, omega, mode)
+            boot_data = data[np.random.choice(n+1, n+1, replace = True)]
 
 
-exact_coverage = 0
-online_gue_coverage = 0
-offline_gue_coverage = 0
-for mc_iter in range(mc_iters):
+            boot_erms = [np.mean(boot_data[0: i+1]) for i in range(len(boot_data))]
+            boot_erms = [1] + boot_erms
+            boot_mu = np.mean(data[:n+1])
+
+            excess_losses = [(thetahat - x)**2 - (boot_mu - x)**2 for (thetahat, x) in zip(boot_erms, boot_data)]
+            log_gue_over_omega = sum([-1*excess_losses[i] for i in range(n-1)])
+            for idx, omega in enumerate(omegas):
+                log_gue = omega*log_gue_over_omega
+                coverages[idx] += log_gue < np.log(1/alpha)
+        coverages /= boot_iters
+        omega_hats[n] = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
+
+    erms = [np.mean(data[0: i+1]) for i in range(len(data))]
+    erms = [1] + erms
+    excess_losses = [(thetahat - x)**2 - (true_value - x)**2 for (thetahat, x) in zip(erms, data)]
+    return sum([-1*omega_hat * excess_loss for (omega_hat, excess_loss) in zip(omega_hats, excess_losses)]) < np.log(1/alpha)
+
+def gibbs(true_value, data, alpha, mode):
+    if mode == "on":
+        return online_gue(data, true_value, alpha)
+    else:
+        return offline_gue(data, true_value, alpha)
+
+
+def mc_iteration(mc_iter, nom_coverage):
+    np.random.seed(mc_iter)
+    exact_coverage = 0
+    online_gue_coverage = 0
+    offline_gue_coverage = 0
+
     xs = np.array([theta + st.gamma.rvs(a = 1, loc = -sigma_alpha, scale = sigma_alpha) + st.gamma.rvs(a = 1, loc = -sigma_beta, scale = sigma_beta) + st.gamma.rvs(a = 1, loc = -sigma, scale = sigma) for _ in range(n)])
     thetahat = np.mean(xs)
 
@@ -83,15 +109,34 @@ for mc_iter in range(mc_iters):
     if gibbs(theta, xs, 1-nom_coverage/100, "off"):
         offline_gue_coverage += 1
 
-print("Nominal Coverage:", nom_coverage/100, "\nBootstrap Coverage:", exact_coverage/mc_iters, "\nOnline Coverage:", online_gue_coverage/mc_iters, "\nOffline Coverage:", offline_gue_coverage/mc_iters, "\n", flush=True)
+    return (exact_coverage, online_gue_coverage, offline_gue_coverage)
 
+exact_coverages = []
+online_coverages = []
+offline_coverages = []
+for nom_coverage in np.linspace(0, 100, 100)[80:]:
+    break
+    with mp.Pool(4) as p:
+        coverages = p.starmap(mc_iteration, [(i, nom_coverage) for i in range(1000)])
+
+    exact_coverage = np.mean([e for (e, on, off) in coverages])
+    online_coverage = np.mean([on for (e, on, off) in coverages])
+    offline_coverage = np.mean([off for (e, on, off) in coverages])
+    exact_coverages.append(exact_coverage)
+    online_coverages.append(online_coverage)
+    offline_coverages.append(offline_coverage)
+    print(nom_coverage)
+    print(exact_coverages)
+    print(online_coverage)
+    print(offline_coverages)
+    print()
 
 exit()
 # Final Results
-nom_coverages = [0.92, 0.9, 0.91, 0.94, 0.87, 0.93, 0.88, 0.86, 0.89, 0.85, 0.82, 0.8, 0.84, 0.83, 0.81, 0.95, 0.97, 0.99, 0.98, 0.96]
-bootstrap_coverages = [0.806, 0.792, 0.801, 0.827, 0.767, 0.817, 0.778, 0.758, 0.787, 0.749, 0.727, 0.717, 0.744, 0.733, 0.722, 0.84, 0.875, 0.904, 0.888, 0.855]
-online_coverages = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-offline_coverages = [0.949, 0.928, 0.938, 0.96, 0.909, 0.952, 0.917, 0.909, 0.923, 0.901, 0.884, 0.873, 0.898, 0.887, 0.875, 0.967, 0.984, 0.999, 0.996, 0.975]
+nom_coverages = np.linspace(0, 1, 100)[80:]
+bootstrap_coverages = [np.float64(0.709), np.float64(0.715), np.float64(0.721), np.float64(0.73), np.float64(0.736), np.float64(0.741), np.float64(0.753), np.float64(0.762), np.float64(0.769), np.float64(0.779), np.float64(0.79), np.float64(0.802), np.float64(0.812), np.float64(0.827), np.float64(0.834), np.float64(0.849), np.float64(0.86), np.float64(0.869), np.float64(0.885), np.float64(0.906)]
+online_coverages = [1.0] * len(nom_coverages)
+offline_coverages = [np.float64(0.881), np.float64(0.886), np.float64(0.895), np.float64(0.9), np.float64(0.906), np.float64(0.912), np.float64(0.916), np.float64(0.922), np.float64(0.929), np.float64(0.943), np.float64(0.953), np.float64(0.957), np.float64(0.968), np.float64(0.976), np.float64(0.978), np.float64(0.985), np.float64(0.989), np.float64(0.993), np.float64(0.996), np.float64(1.0)]
 
 plt.title("Coverage of Two-Way Mean")
 plt.scatter(nom_coverages, bootstrap_coverages, color = "blue", label = "Bootstrapped CS")

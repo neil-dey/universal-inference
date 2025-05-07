@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.stats as st
 import matplotlib.pyplot as plt
+import multiprocessing as mp
 
 np.random.seed(0)
 
@@ -84,7 +85,8 @@ def gibbs(mu, data, nom_coverage):
     #print(add_to_training, len(data))
     return omega * _gibbs(mu, data, add_to_training) >= np.log(1-nom_coverage)
 
-def mc_iteration(nom_coverage):
+def mc_iteration(nom_coverage, mc_iter):
+    np.random.seed(mc_iter)
     # Exact confidence interval
     exact_coverage = 0
     universal_coverage = 0
@@ -100,7 +102,7 @@ def mc_iteration(nom_coverage):
             data.append((st.norm.rvs(loc = mu1, scale = cov**0.5, size = 1)[0], 1))
             n1 += 1
 
-        if n0 == 0 or n1 == 0:
+        if n0 <= 2 or n1 <= 2:
             continue
 
         # Point estimate for (mu0 + mu1)/2
@@ -121,16 +123,19 @@ def mc_iteration(nom_coverage):
 
     # Universal interval
     universal_coverage = gibbs(c, data, nom_coverage)
+    print(universal_coverage)
     return (exact_coverage, universal_coverage)
 
 
-nom_coverages = np.linspace(0, 1, num=100)[90:-1]
+nom_coverages = np.linspace(0, 1, num=100)[82:-1]
 exact_coverages = []
 universal_coverages = []
 for nom_coverage in nom_coverages:
     print("Nominal coverage:", round(nom_coverage, 2))
-    mc_iters = 300
-    output = [mc_iteration(nom_coverage) for _ in range(mc_iters)]
+    mc_iters = 100#300
+    with mp.Pool(4) as p:
+        output = p.starmap(mc_iteration, [(nom_coverage, it) for it in range(mc_iters)])
+        #output = [mc_iteration(nom_coverage) for _ in range(mc_iters)]
 
     exact_coverages.append(np.mean([ec for (ec, uc) in output]))
     universal_coverages.append(np.mean([uc for (ec, uc) in output]))

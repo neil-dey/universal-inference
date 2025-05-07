@@ -20,70 +20,78 @@ sigma = 1
 
 nom_coverage = int(sys.argv[1])
 
-def progressbar(it, prefix="", size=60, out=sys.stdout): # Python3.6+
-    count = len(it)
-    start = time.time() # time estimate start
-    def show(j):
-        x = int(size*j/count)
-        # time estimate calculation and string
-        remaining = ((time.time() - start) / j) * (count - j)
-        mins, sec = divmod(remaining, 60) # limited to minutes
-        time_str = f"{int(mins):02}:{sec:03.1f}"
-        print(f"{prefix}[{u'█'*x}{('.'*(size-x))}] {j}/{count} Est wait {time_str}", end='\r', file=out, flush=True)
-    show(0.1) # avoid div/0
-    for i, item in enumerate(it):
-        yield item
-        show(i+1)
-    print("\n", flush=True, file=out)
-
 def loss(x, theta):
     return (x-theta)**2
 
-def emprisk(theta, xs):
-    return sum([loss(x, theta) for x in xs])
+def emp_risk(theta, xs):
+    return np.mean([loss(x, theta) for x in xs])
 
-def _gibbs(true_theta, data, alpha, omega, mode):
-    if mode == "off":
-        train_data = data[0:len(data)//2]
-        test_data = data[len(data)//2:]
-        thetahat = np.mean(train_data)
-        log_gue = -1*omega * (emprisk(thetahat, test_data) - emprisk(true_theta, test_data))
+def log_gue_over_omega_fn(data, true_value):
+    data_train = data[:len(data)//2]
+    data_test = data[len(data)//2:]
+    return -1 * len(data_test) * (emp_risk(np.mean(data_train), data_test) - emp_risk(true_value, data_test))
 
-    elif mode == "on":
-        thetahats = np.zeros(len(data) + 1)
-        running_sum = 0
-        for idx, x in enumerate(data, start = 1):
-            running_sum += x
-            thetahats[idx] = running_sum/idx
+def offline_gue(data, true_value, alpha):
+    bootstrap_iters = 100
+    omegas = np.linspace(0, 3, 100)[1:]
+    coverages = np.zeros(len(omegas))
 
-        log_gue = -1*omega*sum([loss(x, thetahat) - loss(x, true_theta) for (x, thetahat) in zip(data, thetahats)])
+    data_train = data[:len(data)//2]
+    data_test = data[len(data)//2:]
 
-    return log_gue < np.log(1/alpha)
+    for boot_iter in range(bootstrap_iters):
+        boot_data = data_train[np.random.choice(len(data_train), size = len(data_train), replace = True)]
+        lgoo = log_gue_over_omega_fn(boot_data, np.mean(data_train))
+        for idx, omega in enumerate(omegas):
+            coverages[idx] += (omega * lgoo < np.log(1/alpha))
+    coverages /= bootstrap_iters
 
-def gibbs(true_theta, data, alpha, mode):
-    thetahat = np.mean(data)
+    omega = omegas[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])]
+
+    #print(coverages)
+    #print("    ", omega, coverages[np.argmin([abs(1 - alpha - coverage) for coverage in coverages])])
+    return omega * log_gue_over_omega_fn(data, true_value) < np.log(1/alpha)
+
+def online_gue(data, true_value, alpha):
+    boot_iters = 100
     coverages = []
-    omegas = np.linspace(0, 3, num=100)[1:]
-    for omega in omegas:
-        coverage = 0
+    omegas = np.linspace(0, 3, num = 100)[1:]
+
+    omega_hats = np.zeros(len(data))
+    for n in range(0, len(data)):
+        coverages = np.zeros(len(omegas))
         for _ in range(boot_iters):
-            boot_data = np.random.choice(data, size = len(data), replace = True)
-            if _gibbs(thetahat, boot_data, alpha, omega, mode):
-                coverage += 1
-        coverage /= boot_iters
-        coverages.append(coverage)
-
-    omega = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
-    #print([(np.round(omega, 2), coverage) for (omega, coverage) in zip(omegas, coverages)])
-    #print("   " , omega, coverages[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])])
-    return _gibbs(true_theta, data, alpha, omega, mode)
+            boot_data = data[np.random.choice(n+1, n+1, replace = True)]
 
 
+            boot_erms = [np.mean(boot_data[0: i+1]) for i in range(len(boot_data))]
+            boot_erms = [1] + boot_erms
+            boot_mu = np.mean(data[:n+1])
+
+            excess_losses = [(thetahat - x)**2 - (boot_mu - x)**2 for (thetahat, x) in zip(boot_erms, boot_data)]
+            log_gue_over_omega = sum([-1*excess_losses[i] for i in range(n-1)])
+            for idx, omega in enumerate(omegas):
+                log_gue = omega*log_gue_over_omega
+                coverages[idx] += log_gue < np.log(1/alpha)
+        coverages /= boot_iters
+        omega_hats[n] = omegas[np.argmin([abs(alpha - (1-coverage)) for coverage in coverages])]
+
+    erms = [np.mean(data[0: i+1]) for i in range(len(data))]
+    erms = [1] + erms
+    excess_losses = [(thetahat - x)**2 - (true_value - x)**2 for (thetahat, x) in zip(erms, data)]
+    return sum([-1*omega_hat * excess_loss for (omega_hat, excess_loss) in zip(omega_hats, excess_losses)]) < np.log(1/alpha)
+
+def gibbs(true_value, data, alpha, mode):
+    if mode == "on":
+        return online_gue(data, true_value, alpha)
+    else:
+        return offline_gue(data, true_value, alpha)
 
 
-#for mc_iter in progressbar(range(mc_iters), str(np.round(nom_coverage, 0)) + " "):
+bootstrap_intervals = []
+offline_intervals = []
+online_intervals = []
 for mc_iter in range(mc_iters):
-    continue
     candidate_thetas = np.linspace(5.5, 15.5, num=100)
     bootstrap_inclusions = []
     online_inclusions = []
@@ -107,35 +115,21 @@ for mc_iter in range(mc_iters):
         offline_inclusions.append(gibbs(c_t, xs, 1-nom_coverage/100, "off"))
 
 
-    print()
     l = list(compress(candidate_thetas, bootstrap_inclusions))
-    print("Bootstrap:", min(l), max(l))
+    bootstrap_intervals.append((min(l), max(l)))
+
     l = list(compress(candidate_thetas, online_inclusions))
-    print("Online:", min(l), max(l))
+    online_intervals.append((min(l), max(l)))
+
     l = list(compress(candidate_thetas, offline_inclusions))
-    print("Offline:", min(l), max(l))
+    offline_intervals.append((min(l), max(l)))
 
 
-bootstrap_intervals = [(9.843434343434343, 10.954545454545453), (9.237373737373737, 10.247474747474747), (9.237373737373737, 10.44949494949495), (9.540404040404042, 10.146464646464647), (9.43939393939394, 10.44949494949495),(9.843434343434343, 10.651515151515152),(9.338383838383837, 9.641414141414142),(9.742424242424242, 10.348484848484848),(9.43939393939394, 10.247474747474747),(9.944444444444445, 10.853535353535353)]
-
-online_intervals = [(6.207070707070707, 14.59090909090909),(5.601010101010101, 14.085858585858587),(5.5, 14.48989898989899),(5.702020202020202, 13.883838383838384),(5.904040404040404, 13.984848484848484),(5.803030303030303, 14.59090909090909),(5.5, 13.47979797979798),(6.005050505050505, 14.186868686868687),(5.904040404040404, 13.681818181818182),(6.106060606060606, 14.691919191919192)]
-
-offline_intervals = [(9.843434343434343, 11.257575757575758),(9.338383838383837, 11.257575757575758),(7.722222222222222, 10.55050505050505),(9.43939393939394, 10.954545454545453),(8.934343434343434, 10.44949494949495),(9.742424242424242, 11.358585858585858),(9.136363636363637, 10.348484848484848),(9.641414141414142, 10.348484848484848),(9.338383838383837, 10.954545454545453),(9.944444444444445, 10.853535353535353)]
+print(bootstrap_intervals)
+print(online_intervals)
+print(offline_intervals)
 
 plt.title("Visualizations of Confidence Intervals for Two-Way Mean")
-
-"""
-x = 0.9
-legend_flag = True
-for (bi, oni, ofi) in zip(bootstrap_intervals, online_intervals, offline_intervals):
-    plt.vlines(x, bi[0], bi[1], color = 'blue', label = "Bootstrapped CI" if legend_flag else "")
-    x += 0.1
-    plt.vlines(x, ofi[0], ofi[1], color = 'gold', label = "Offline CI" if legend_flag else "")
-    x += 0.1
-    plt.vlines(x, oni[0], oni[1], color = 'red', label = "Online CI" if legend_flag else "")
-    x += 0.8
-    legend_flag = False
-"""
 x = 0.8
 legend_flag = True
 for (bi, oni, ofi) in zip(bootstrap_intervals, online_intervals, offline_intervals):
