@@ -279,7 +279,6 @@ online_coverages = []
 offline_coverages = []
 
 for nom_coverage in nom_coverages:
-    break
     print("Nominal coverage:", round(nom_coverage, 2))
     mc_iters = 100#300
     with mp.Pool(4) as p:
@@ -290,10 +289,12 @@ for nom_coverage in nom_coverages:
     offline_coverages.append(np.mean([off for (e, on, off) in output]))
     print(exact_coverages, online_coverages, offline_coverages)
 
+"""
 nom_coverages = [0.8, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99]
 exact_coverages = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.001, 0.011, 0.152, 0.28, 0.41, 0.515, 0.654, 0.773, 0.896]
 online_coverages = [0.908, 0.909, 0.909, 0.91, 0.909, 0.91, 0.91, 0.911, 0.915, 0.918, 0.918, 0.972, 0.973, 0.973, 0.975, 0.976, 0.997, 0.998, 0.998, 1.0]
 offline_coverages = [0.911, 0.911, 0.911, 0.911, 0.911, 0.911, 0.912, 0.912, 0.913, 0.913, 0.915, 0.972, 0.972, 0.972, 0.972, 0.972, 0.993, 0.995, 0.995, 1.0]
+"""
 
 plt.rcParams['text.usetex'] = True
 plt.title("Effects of Optional Stopping of a True Null Hypothesis")

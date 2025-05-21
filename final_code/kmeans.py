@@ -18,7 +18,25 @@ def kmeans(x):
 
     return mu1, mu2, mu3
 
-def _gibbs(x, true_mu1, true_mu2, true_mu3, nom_coverage, omega):
+def online_gue(x, true_mu1, true_mu2, true_mu3, nom_coverage, omega, random = False):
+    # KMeans doesn't like duplicate data points; add a tiny amount of noise to data to rectify this
+    for pt in x:
+        pt += (np.random.rand(2,) - 0.5)/1000
+
+    def emp_risk_test(mu, data):
+        return sum([np.linalg.norm(xi - mu[np.argmin([np.linalg.norm(xi - mui)**2 for mui in mu])])**2 for xi in data])
+
+    log_gue = 3
+    for i in range(4,len(x)):
+        mu1, mu2, mu3 = kmeans(x[:i-1])
+        if not random:
+            lr = omega
+        else:
+            lr = np.random.rand()*2*omega
+        log_gue += lr * (emp_risk_test([mu1, mu2, mu3], x[:i]) - emp_risk_test([true_mu1, true_mu2, true_mu3],x[:i-1]))
+    return log_gue >= np.log(1 - nom_coverage)
+
+def _gibbs(x, true_mu1, true_mu2, true_mu3, nom_coverage, omega, random = False):
     (train, test) = np.vsplit(x, 2)
 
     # KMeans doesn't like duplicate data points; add a tiny amount of noise to training data to rectify this
@@ -27,37 +45,21 @@ def _gibbs(x, true_mu1, true_mu2, true_mu3, nom_coverage, omega):
 
     def emp_risk_test(mu, data):
         return sum([np.linalg.norm(xi - mu[np.argmin([np.linalg.norm(xi - mui)**2 for mui in mu])])**2 for xi in data])
+
     mu1, mu2, mu3 = kmeans(train)
-    T = omega * (emp_risk_test([mu1, mu2, mu3], test) - emp_risk_test([true_mu1, true_mu2, true_mu3], test))
+    if random:
+        lr = np.random.rand() * 2 * omega
+    else:
+        lr = omega
+    T =  lr * (emp_risk_test([mu1, mu2, mu3], test) - emp_risk_test([true_mu1, true_mu2, true_mu3], test))
     return T >= np.log(1 - nom_coverage)
-
-def gibbs(x, nom_coverage):
-    mu1, mu2, mu3 = kmeans(x)
-
-    x = np.array(x)
-
-    boot_iters = 100
-    coverages = []
-    omegas = np.linspace(0, 100, num = 20)[1:]
-    for omega in omegas:
-        boot_coverages = [_gibbs(np.random.default_rng().choice(x, size = len(x), shuffle = False), mu1, mu2, mu3, nom_coverage, omega) for _ in range(boot_iters)]
-        coverage = np.mean(boot_coverages)
-        coverages.append(coverage)
-
-    omega = omegas[np.argmin([abs(nom_coverage - coverage) for coverage in coverages])]
-    print("    ", omega, coverages[np.argmin([abs(nom_coverage - coverage) for coverage in coverages])])
-
-    true_mu1 = [1, 0]
-    true_mu2 = [np.cos(2*np.pi/3), np.sin(2*np.pi/3)]
-    true_mu3 = [np.cos(4*np.pi/3), np.sin(4*np.pi/3)]
-    return _gibbs(x, true_mu1, true_mu2, true_mu3, nom_coverage, omega)
-
-
-
 
 def mc_iteration(nom_coverage):
     exact_coverage = 0
-    universal_coverage = 0
+    online_nonrandom_coverage = 0
+    offline_nonrandom_coverage = 0
+    online_random_coverage = 0
+    offline_random_coverage = 0
 
     # Generate cluster data
     x = []
@@ -99,41 +101,54 @@ def mc_iteration(nom_coverage):
     pval = 1 - st.chi2.cdf(sq_dist_to_origin, 2)
     if pval > 1 - nom_coverage:
         exact_coverage += 1
+    exact_coverage = 0
 
     # Gibbs CS
     true_mu1 = [1, 0]
     true_mu2 = [np.cos(2*np.pi/3), np.sin(2*np.pi/3)]
     true_mu3 = [np.cos(4*np.pi/3), np.sin(4*np.pi/3)]
-    universal_coverage += _gibbs(np.array(x), true_mu1, true_mu2, true_mu3, nom_coverage, 30)# gibbs(x, nom_coverage)
+    offline_nonrandom_coverage += _gibbs(np.array(x), true_mu1, true_mu2, true_mu3, nom_coverage, 30, random = False)
+    online_nonrandom_coverage += online_gue(np.array(x), true_mu1, true_mu2, true_mu3, nom_coverage, 7, random = False)
+    offline_random_coverage += _gibbs(np.array(x), true_mu1, true_mu2, true_mu3, nom_coverage, 30, random = True)
+    online_random_coverage += online_gue(np.array(x), true_mu1, true_mu2, true_mu3, nom_coverage, 7, random = True)
 
-    return (exact_coverage, universal_coverage)
+    return (offline_nonrandom_coverage,online_nonrandom_coverage, offline_random_coverage, online_random_coverage)
 
 
 
 nom_coverages = np.linspace(0.01, 1, num=100)[80:-1]
-exact_coverages = []
-universal_coverages = []
+offline_nonrandom_coverages = []
+online_nonrandom_coverages = []
+offline_random_coverages = []
+online_random_coverages = []
 for nom_coverage in nom_coverages:
     print("Nominal Coverage:", nom_coverage)
     mc_iters = 1000
     output = list(map(mc_iteration, [nom_coverage for _ in range(mc_iters)]))
 
-    exact_coverages.append(np.mean([ec for (ec, uc) in output]))
-    universal_coverages.append(np.mean([uc for (ec, uc) in output]))
-    print(exact_coverages, universal_coverages, flush = True)
+    offline_nonrandom_coverages.append(np.mean([w for (w,x,y,z) in output]))
+    online_nonrandom_coverages.append(np.mean([x for (w,x,y,z) in output]))
+    offline_random_coverages.append(np.mean([y for (w,x,y,z) in output]))
+    online_random_coverages.append(np.mean([z for (w,x,y,z) in output]))
+    print(offline_nonrandom_coverages, online_nonrandom_coverages, offline_random_coverages, online_random_coverages, flush = True)
 
-# Final results
 """
-exact_coverages = [0.036, 0.039, 0.057, 0.045, 0.048, 0.045, 0.044, 0.042, 0.037, 0.047, 0.052, 0.048, 0.051, 0.062, 0.056, 0.064, 0.051, 0.068, 0.066]
-universal_coverages = [0.836, 0.857, 0.856, 0.867, 0.892, 0.896, 0.896, 0.895, 0.932, 0.918, 0.932, 0.949, 0.962, 0.967, 0.983, 0.986, 0.986, 0.994, 0.999]
+bootstrap_coverages = [0.036, 0.039, 0.057, 0.045, 0.048, 0.045, 0.044, 0.042, 0.037, 0.047, 0.052, 0.048, 0.051, 0.062, 0.056, 0.064, 0.051, 0.068, 0.066]
+offline_nonrandom_coverages = [np.float64(0.844), np.float64(0.828), np.float64(0.857), np.float64(0.858), np.float64(0.867), np.float64(0.884), np.float64(0.902), np.float64(0.903), np.float64(0.92), np.float64(0.919), np.float64(0.944), np.float64(0.943), np.float64(0.951), np.float64(0.964), np.float64(0.979), np.float64(0.981), np.float64(0.995), np.float64(0.997), np.float64(0.998)]
+online_nonrandom_coverages = [np.float64(0.865), np.float64(0.851), np.float64(0.881), np.float64(0.885), np.float64(0.905), np.float64(0.895), np.float64(0.893), np.float64(0.915), np.float64(0.92), np.float64(0.925), np.float64(0.922), np.float64(0.927), np.float64(0.938), np.float64(0.935), np.float64(0.965), np.float64(0.97), np.float64(0.972), np.float64(0.98), np.float64(0.992)]
+offline_random_coverages = [np.float64(0.835), np.float64(0.841), np.float64(0.831), np.float64(0.852), np.float64(0.841), np.float64(0.862), np.float64(0.86), np.float64(0.88), np.float64(0.882), np.float64(0.914), np.float64(0.918), np.float64(0.903), np.float64(0.924), np.float64(0.933), np.float64(0.941), np.float64(0.945), np.float64(0.968), np.float64(0.984), np.float64(0.991)]
+online_random_coverages = [np.float64(0.846), np.float64(0.839), np.float64(0.873), np.float64(0.86), np.float64(0.883), np.float64(0.873), np.float64(0.886), np.float64(0.893), np.float64(0.904), np.float64(0.905), np.float64(0.894), np.float64(0.902), np.float64(0.924), np.float64(0.921), np.float64(0.95), np.float64(0.95), np.float64(0.949), np.float64(0.964), np.float64(0.991)]
+plt.plot(nom_coverages, nom_coverages, linestyle='dashed', color = 'black')
+"""
 
-plt.scatter(nom_coverages, exact_coverages, color = "blue", label = "Bootstrapped CS")
-plt.scatter(nom_coverages, universal_coverages, color = "red", marker = "^", label = "Offline GUe CS")
-plt.plot(nom_coverages, nom_coverages, color = "black")
+plt.scatter(nom_coverages, offline_nonrandom_coverages, color ='blue', label = "Offline, ω = 30")
+plt.scatter(nom_coverages, online_nonrandom_coverages, color = 'red', marker = "+", label = "Online, ω = 7")
+plt.scatter(nom_coverages, offline_random_coverages, color ='m', marker = "x", label = "Offline, ω ~ Unif(0, 60)")
+plt.scatter(nom_coverages, online_random_coverages, color = 'g', marker = '^', label = "Online, ω ~ Unif(0, 14)")
+plt.scatter(nom_coverages, bootstrap_coverages, color = 'k', marker = '1', label = "Bootstrap")
+plt.legend()
 plt.xlabel("Nominal Coverage")
 plt.ylabel("Observed Coverage")
 plt.title("Coverage of KMeans Centroid(s)")
 plt.legend(loc="center right")
-#plt.show()
-plt.savefig("kmeans_coverage.png")
-"""
+plt.savefig("kmeans_online.png")

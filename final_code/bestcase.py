@@ -275,7 +275,6 @@ online_coverages = []
 offline_coverages = []
 
 for nom_coverage in nom_coverages:
-    break
     print("Nominal coverage:", round(nom_coverage, 2))
     mc_iters = 1000
     with mp.Pool(4) as p:
@@ -286,10 +285,12 @@ for nom_coverage in nom_coverages:
     offline_coverages.append(np.mean([off for (e, on, off) in output]))
     print(exact_coverages, online_coverages, offline_coverages)
 
+"""
 nom_coverages = [0.8, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99]
 exact_coverages = [np.float64(0.612), np.float64(0.622), np.float64(0.647), np.float64(0.667), np.float64(0.687), np.float64(0.7), np.float64(0.719), np.float64(0.731), np.float64(0.751), np.float64(0.771), np.float64(0.784), np.float64(0.804), np.float64(0.832), np.float64(0.846), np.float64(0.864), np.float64(0.878), np.float64(0.904), np.float64(0.918), np.float64(0.946), np.float64(0.973)]
 online_coverages = [np.float64(0.921), np.float64(0.92), np.float64(0.913), np.float64(0.916), np.float64(0.907), np.float64(0.903), np.float64(0.907), np.float64(0.961), np.float64(0.958), np.float64(0.96), np.float64(0.963), np.float64(0.958), np.float64(0.961), np.float64(0.962), np.float64(0.949), np.float64(0.959), np.float64(0.97), np.float64(0.974), np.float64(0.977), np.float64(0.984)]
 offline_coverages = [np.float64(0.832), np.float64(0.834), np.float64(0.843), np.float64(0.846), np.float64(0.849), np.float64(0.862), np.float64(0.868), np.float64(0.884), np.float64(0.898), np.float64(0.898), np.float64(0.895), np.float64(0.893), np.float64(0.906), np.float64(0.919), np.float64(0.915), np.float64(0.924), np.float64(0.931), np.float64(0.951), np.float64(0.976), np.float64(0.985)]
+"""
 
 plt.rcParams['text.usetex'] = True
 plt.title("Effects of Optional Stopping of a True Null Hypothesis")

@@ -96,7 +96,6 @@ exact_coverages = []
 online_gue_coverages = []
 offline_gue_coverages = []
 for nom_coverage in nom_coverages:
-    continue
     print(nom_coverage)
     exact_coverage = 0
     online_gue_coverage = 0
@@ -136,11 +135,13 @@ for nom_coverage in nom_coverages:
 
 
 # Quantile coverages
+"""
 nom_coverages = [0.8, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99]
 
 exact_coverages = [0.552, 0.578, 0.594, 0.594, 0.64, 0.672, 0.704, 0.704, 0.72, 0.72, 0.752, 0.752, 0.764, 0.752, 0.78, 0.812, 0.848, 0.876, 0.906, 0.922]
 online_gue_coverages = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 offline_gue_coverages = [0.926, 0.938, 0.938, 0.938, 0.938, 0.938, 0.938, 0.954, 0.954, 0.954, 0.954, 0.954, 0.96, 0.954, 0.954, 0.954, 0.956, 0.97, 0.986, 0.986]
+"""
 
 plt.scatter(nom_coverages, exact_coverages, color = "blue", label = "Bootstrapped CS")
 plt.scatter(nom_coverages, online_gue_coverages, color = "red", marker = "^", label = "Online GUe CS")

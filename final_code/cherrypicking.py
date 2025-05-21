@@ -100,7 +100,6 @@ exact_coverages = []
 offline_coverages = []
 online_coverages = []
 for nom_coverage in nom_coverages:
-    break
     print(nom_coverage)
     exact_coverage = 0
     offline_coverage = 0
@@ -124,8 +123,8 @@ for nom_coverage in nom_coverages:
 # Final results
 
 # Triangular distribution
+"""
 if dist == 0:
-    """
     exact_coverages = [np.float64(0.674), np.float64(0.687), np.float64(0.7), np.float64(0.712), np.float64(0.721), np.float64(0.734), np.float64(0.749), np.float64(0.757), np.float64(0.768), np.float64(0.777), np.float64(0.788), np.float64(0.8), np.float64(0.808), np.float64(0.823), np.float64(0.839), np.float64(0.857), np.float64(0.874), np.float64(0.896), np.float64(0.918), np.float64(0.942)]
     offline_coverages = [np.float64(0.835), np.float64(0.838), np.float64(0.842), np.float64(0.847), np.float64(0.851), np.float64(0.859), np.float64(0.866), np.float64(0.873), np.float64(0.88), np.float64(0.885), np.float64(0.889), np.float64(0.894), np.float64(0.904), np.float64(0.918), np.float64(0.929), np.float64(0.939), np.float64(0.947), np.float64(0.956), np.float64(0.975), np.float64(0.988)]
     online_coverages = [np.float64(0.928), np.float64(0.92), np.float64(0.924), np.float64(0.93), np.float64(0.938), np.float64(0.939), np.float64(0.94), np.float64(0.939), np.float64(0.94), np.float64(0.946), np.float64(0.948), np.float64(0.948), np.float64(0.954), np.float64(0.958), np.float64(0.965), np.float64(0.968), np.float64(0.965), np.float64(0.972), np.float64(0.981), np.float64(0.992)]
@@ -134,7 +133,6 @@ if dist == 0:
     exact_coverages = [np.float64(0.767), np.float64(0.783), np.float64(0.796), np.float64(0.808), np.float64(0.818), np.float64(0.825), np.float64(0.836), np.float64(0.848), np.float64(0.855), np.float64(0.861), np.float64(0.875), np.float64(0.884), np.float64(0.895), np.float64(0.908), np.float64(0.921), np.float64(0.932), np.float64(0.951), np.float64(0.969), np.float64(0.983), np.float64(0.99)]
     offline_coverages = [np.float64(0.884), np.float64(0.888), np.float64(0.892), np.float64(0.9), np.float64(0.905), np.float64(0.909), np.float64(0.913), np.float64(0.919), np.float64(0.925), np.float64(0.929), np.float64(0.934), np.float64(0.941), np.float64(0.946), np.float64(0.953), np.float64(0.965), np.float64(0.973), np.float64(0.975), np.float64(0.98), np.float64(0.987), np.float64(0.995)]
     online_coverages = [np.float64(0.967), np.float64(0.967), np.float64(0.964), np.float64(0.968), np.float64(0.969), np.float64(0.97), np.float64(0.968), np.float64(0.97), np.float64(0.968), np.float64(0.972), np.float64(0.975), np.float64(0.976), np.float64(0.979), np.float64(0.976), np.float64(0.98), np.float64(0.978), np.float64(0.983), np.float64(0.987), np.float64(0.993), np.float64(0.996)]
-    """
     exact_coverages = [np.float64(0.674), np.float64(0.687), np.float64(0.7), np.float64(0.712), np.float64(0.721), np.float64(0.734), np.float64(0.749), np.float64(0.757), np.float64(0.768), np.float64(0.777), np.float64(0.788), np.float64(0.8), np.float64(0.808), np.float64(0.823), np.float64(0.839), np.float64(0.857), np.float64(0.874), np.float64(0.896), np.float64(0.918), np.float64(0.942)]
     offline_coverages = [np.float64(0.87), np.float64(0.875), np.float64(0.882), np.float64(0.883), np.float64(0.886), np.float64(0.891), np.float64(0.896), np.float64(0.903), np.float64(0.915), np.float64(0.921), np.float64(0.928), np.float64(0.934), np.float64(0.94), np.float64(0.949), np.float64(0.952), np.float64(0.963), np.float64(0.974), np.float64(0.979), np.float64(0.989), np.float64(0.996)]
     online_coverages = [np.float64(0.928), np.float64(0.92), np.float64(0.924), np.float64(0.93), np.float64(0.938), np.float64(0.939), np.float64(0.94), np.float64(0.939), np.float64(0.94), np.float64(0.946), np.float64(0.948), np.float64(0.948), np.float64(0.954), np.float64(0.958), np.float64(0.965), np.float64(0.968), np.float64(0.965), np.float64(0.972), np.float64(0.981), np.float64(0.992)]
@@ -147,6 +145,7 @@ else:
     exact_coverages = [np.float64(0.757), np.float64(0.769), np.float64(0.775), np.float64(0.787), np.float64(0.798), np.float64(0.804), np.float64(0.812), np.float64(0.823), np.float64(0.836), np.float64(0.848), np.float64(0.862), np.float64(0.874), np.float64(0.883), np.float64(0.893), np.float64(0.903), np.float64(0.915), np.float64(0.937), np.float64(0.949), np.float64(0.961), np.float64(0.975)]
     offline_coverages = [np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0)]
     online_coverages = [np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0), np.float64(1.0)]
+"""
 
 plt.scatter(nom_coverages, exact_coverages, color = "blue", label = "Exact CI")
 plt.scatter(nom_coverages, online_coverages, color = "red", marker = "^", label = "Online GUI CS")

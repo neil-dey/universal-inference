@@ -115,7 +115,6 @@ exact_coverages = []
 online_coverages = []
 offline_coverages = []
 for nom_coverage in np.linspace(0, 100, 100)[80:]:
-    break
     with mp.Pool(4) as p:
         coverages = p.starmap(mc_iteration, [(i, nom_coverage) for i in range(1000)])
 
@@ -131,12 +130,13 @@ for nom_coverage in np.linspace(0, 100, 100)[80:]:
     print(offline_coverages)
     print()
 
-exit()
 # Final Results
+"""
 nom_coverages = np.linspace(0, 1, 100)[80:]
 bootstrap_coverages = [np.float64(0.709), np.float64(0.715), np.float64(0.721), np.float64(0.73), np.float64(0.736), np.float64(0.741), np.float64(0.753), np.float64(0.762), np.float64(0.769), np.float64(0.779), np.float64(0.79), np.float64(0.802), np.float64(0.812), np.float64(0.827), np.float64(0.834), np.float64(0.849), np.float64(0.86), np.float64(0.869), np.float64(0.885), np.float64(0.906)]
 online_coverages = [1.0] * len(nom_coverages)
 offline_coverages = [np.float64(0.881), np.float64(0.886), np.float64(0.895), np.float64(0.9), np.float64(0.906), np.float64(0.912), np.float64(0.916), np.float64(0.922), np.float64(0.929), np.float64(0.943), np.float64(0.953), np.float64(0.957), np.float64(0.968), np.float64(0.976), np.float64(0.978), np.float64(0.985), np.float64(0.989), np.float64(0.993), np.float64(0.996), np.float64(1.0)]
+"""
 
 plt.title("Coverage of Two-Way Mean")
 plt.scatter(nom_coverages, bootstrap_coverages, color = "blue", label = "Bootstrapped CS")
